@@ -1,6 +1,11 @@
 # VRC Timeline
 
-VRChat 活動記録ツール
+VRChat 活動記録ツール  
+<br>
+
+boothでも配布しています。  
+https://tsugu233.booth.pm/items/8278614  
+<br>
 
 ## 概要
 
