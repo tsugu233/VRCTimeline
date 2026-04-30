@@ -270,7 +270,7 @@ ver 1.0.0  初回公開リリース
 
 nukora氏の「VRChatActivityTools (MIT License)」との互換性を実装しています。  
 
-長い間、愛用させていただいた素晴らしいツールに敬意を表します。  
+長い間、愛用させていただいた素晴らしいツールに敬意と感謝を込めて実装させていただきました。  
 
 https://github.com/nukora/VRChatActivityTools  
 <br>
