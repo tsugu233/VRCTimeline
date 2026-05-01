@@ -103,7 +103,6 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         catch { }
 
         _logWatcher.LogEntryDetected += OnLogEntryDetected;
-        _logWatcher.VRChatExited += OnVRChatExited;
         _logWatcher.Start();
         IsMonitoring = true;
     }
@@ -123,22 +122,23 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         Application.Current?.Dispatcher.InvokeAsync(() => ProcessLogEntry(entry));
     }
 
-    /// <summary>VRChat 終了時の後処理（訪問・セッションの閉じ処理、UI リセット）</summary>
-    private void OnVRChatExited()
+    /// <summary>
+    /// VRChat 終了時の後処理（訪問・セッションの閉じ処理、UI リセット、終了ログの追加）。
+    /// プロセス監視側から VRChat 終了が検知された際に呼び出す。
+    /// </summary>
+    public async void HandleVRChatExited()
     {
-        Application.Current?.Dispatcher.InvokeAsync(async () =>
+        StopMonitoring();
+        await CloseCurrentWorldVisitAsync();
+        CurrentWorldName = "未接続";
+        CurrentInstanceId = string.Empty;
+        CurrentPlayers.Clear();
+        PlayerCount = 0;
+        LogEntries.Insert(0, new LogEntry
         {
-            await CloseCurrentWorldVisitAsync();
-            CurrentWorldName = "未接続";
-            CurrentInstanceId = string.Empty;
-            CurrentPlayers.Clear();
-            PlayerCount = 0;
-            LogEntries.Insert(0, new LogEntry
-            {
-                Timestamp = DateTime.Now,
-                Type = LogEntryType.Info,
-                Message = "VRChatが終了しました"
-            });
+            Timestamp = DateTime.Now,
+            Type = LogEntryType.Info,
+            Message = "VRChatが終了しました"
         });
     }
 

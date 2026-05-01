@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Globalization;
 using System.IO;
 using VRCTimeline.Models;
@@ -18,7 +17,6 @@ public record CurrentSessionState(
 /// <summary>
 /// VRChat のログファイルをリアルタイムに監視し、新しいイベントを検出して通知する。
 /// 2秒間隔のポーリングでファイル末尾の追記を読み取り、LogEntry イベントを発行する。
-/// また、VRChat プロセスの終了も監視する。
 /// </summary>
 public class LogWatcher : IDisposable
 {
@@ -37,14 +35,8 @@ public class LogWatcher : IDisposable
     private readonly string _logDirectory;
     private readonly object _lock = new();
 
-    /// <summary>前回チェック時の VRChat 実行状態（終了検出用）</summary>
-    private bool _wasVrcRunning;
-
     /// <summary>ログ行が解析された際に発火するイベント</summary>
     public event Action<LogEntry>? LogEntryDetected;
-
-    /// <summary>VRChat プロセスの終了を検出した際に発火するイベント</summary>
-    public event Action? VRChatExited;
 
     /// <summary>監視中かどうか</summary>
     public bool IsMonitoring { get; private set; }
@@ -148,17 +140,7 @@ public class LogWatcher : IDisposable
             _directoryWatcher.EnableRaisingEvents = true;
         }
 
-        _wasVrcRunning = IsVRChatRunning();
         _pollTimer = new Timer(ReadNewContent, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(2));
-    }
-
-    /// <summary>VRChat.exe プロセスが実行中かどうかを確認する</summary>
-    private static bool IsVRChatRunning()
-    {
-        var processes = Process.GetProcessesByName("VRChat");
-        var running = processes.Length > 0;
-        foreach (var p in processes) p.Dispose();
-        return running;
     }
 
     /// <summary>リアルタイム監視を停止し、リソースを解放する</summary>
@@ -193,19 +175,10 @@ public class LogWatcher : IDisposable
     /// <summary>
     /// ポーリングタイマーのコールバック。
     /// ログファイルの追記分を読み取り、各行を解析してイベントを発行する。
-    /// VRChat プロセスの終了も検出する。
     /// </summary>
     private void ReadNewContent(object? state)
     {
         if (!IsMonitoring) return;
-
-        // VRChat 終了検出
-        var isRunning = IsVRChatRunning();
-        if (_wasVrcRunning && !isRunning)
-        {
-            VRChatExited?.Invoke();
-        }
-        _wasVrcRunning = isRunning;
 
         string? filePath;
         long position;

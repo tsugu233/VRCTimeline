@@ -148,7 +148,7 @@ public partial class MainViewModel : ObservableObject
             }
             else
             {
-                RealtimeMonitorVm.StopMonitoring();
+                RealtimeMonitorVm.HandleVRChatExited();
             }
         });
     }
