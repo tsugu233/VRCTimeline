@@ -224,7 +224,7 @@ public partial class VideoDisplayItem : ObservableObject
     public bool NeedsFetch { get; set; }
 
     /// <summary>検出日時の表示文字列（曜日・秒付き）</summary>
-    public string DetectedAtDisplay => DetectedAt.ToString(DateFormatHelper.DateWithDayAndSeconds, DateFormatHelper.JaCulture);
+    public string DetectedAtDisplay => DetectedAt.ToString(DateFormatHelper.DateWithDayAndSeconds, DateFormatHelper.GetCurrentCulture());
 
     /// <summary>サムネイルが利用可能かどうか</summary>
     public bool HasThumbnail => ThumbnailPath != null;

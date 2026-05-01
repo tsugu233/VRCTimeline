@@ -13,7 +13,7 @@
         <materialDesign:Card Grid.Row="0" Padding="20" Margin="0,0,0,16"
                               materialDesign:ElevationAssist.Elevation="Dp2">
             <StackPanel>
-                <TextBlock Text="現在のワールド"
+                <TextBlock Text="{DynamicResource Realtime_CurrentWorld}"
                            Style="{StaticResource MaterialDesignCaptionTextBlock}"
                            Opacity="0.6" />
                 <TextBlock Text="{Binding CurrentWorldName}"
@@ -22,8 +22,10 @@
                 <StackPanel Orientation="Horizontal">
                     <materialDesign:PackIcon Kind="AccountGroup" VerticalAlignment="Center"
                                               Margin="0,0,6,0" />
-                    <TextBlock Text="{Binding PlayerCount, StringFormat='{}{0} 人'}"
-                               VerticalAlignment="Center" />
+                    <TextBlock VerticalAlignment="Center">
+                        <Run Text="{Binding PlayerCount}" />
+                        <Run Text="{DynamicResource Str_PlayerUnit}" />
+                    </TextBlock>
                 </StackPanel>
             </StackPanel>
         </materialDesign:Card>
@@ -40,7 +42,7 @@
             <materialDesign:Card Grid.Column="0" Padding="16"
                                   materialDesign:ElevationAssist.Elevation="Dp1">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="参加中のプレイヤー"
+                    <TextBlock DockPanel.Dock="Top" Text="{DynamicResource Realtime_JoinedPlayers}"
                                Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                                Margin="0,0,0,12" />
                     <ScrollViewer VerticalScrollBarVisibility="Auto">
@@ -63,7 +65,7 @@
             <materialDesign:Card Grid.Column="2" Padding="16"
                                   materialDesign:ElevationAssist.Elevation="Dp1">
                 <DockPanel>
-                    <TextBlock DockPanel.Dock="Top" Text="ログ"
+                    <TextBlock DockPanel.Dock="Top" Text="{DynamicResource Realtime_Log}"
                                Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                                Margin="0,0,0,12" />
                     <ScrollViewer VerticalScrollBarVisibility="Auto"

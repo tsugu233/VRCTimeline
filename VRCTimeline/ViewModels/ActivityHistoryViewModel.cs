@@ -358,7 +358,7 @@ public partial class ActivityHistoryViewModel : ObservableObject
     private async Task RejoinSelectedInstanceAsync()
     {
         if (SelectedVisit == null || string.IsNullOrEmpty(SelectedVisit.InstanceId)) return;
-        if (await _dialog.ShowConfirmAsync($"「{SelectedVisit.WorldName}」に入り直しますか？"))
+        if (await _dialog.ShowConfirmAsync(string.Format(LocalizationService.GetString("Confirm_Rejoin"), SelectedVisit.WorldName)))
             VRChatLauncher.LaunchInstance(SelectedVisit.InstanceId);
     }
 
@@ -372,7 +372,7 @@ public partial class ActivityHistoryViewModel : ObservableObject
         var hasPhotos = await db.PhotoRecords.AnyAsync(p => p.WorldVisitId == SelectedVisit.Id);
         if (!hasPhotos)
         {
-            await _dialog.ShowInfoAsync("この訪問の写真は見つかりませんでした。");
+            await _dialog.ShowInfoAsync(LocalizationService.GetString("Info_NoPhotosForVisit"));
             return;
         }
 
@@ -410,10 +410,10 @@ public class WorldVisitDisplay
     /// <summary>日付・曜日・時刻を含む表示文字列</summary>
     public string JoinedAtDisplay => DateFormatHelper.FormatDateWithDayAndTime(JoinedAt);
 
-    /// <summary>滞在時間の表示文字列（未退室の場合は "滞在中"）</summary>
+    /// <summary>滞在時間の表示文字列（未退室の場合はローカライズされた「滞在中」相当文字列）</summary>
     public string Duration => LeftAt.HasValue
         ? (LeftAt.Value - JoinedAt).ToString(@"hh\:mm\:ss")
-        : "滞在中";
+        : LocalizationService.GetString("Str_StayingInWorld");
 
     /// <summary>入室〜退室の時間範囲表示</summary>
     public string TimeRange => DateFormatHelper.FormatTimeRange(JoinedAt, LeftAt);

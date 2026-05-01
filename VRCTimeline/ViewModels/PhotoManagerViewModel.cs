@@ -44,6 +44,12 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>訪問フィルター時のプレイヤーリスト（写真選択前のデフォルト表示用）</summary>
     private List<PlayerDisplay> _currentVisitPlayers = [];
 
+    /// <summary>表示中写真の最小撮影日時（言語変更時の再フォーマット用）</summary>
+    private DateTime? _photoMinDate;
+
+    /// <summary>表示中写真の最大撮影日時（言語変更時の再フォーマット用）</summary>
+    private DateTime? _photoMaxDate;
+
     /// <summary>表示期間の開始日（デフォルト: 30日前）</summary>
     [ObservableProperty]
     private DateTime _filterDateFrom = DateTime.Today.AddDays(-30);
@@ -114,6 +120,33 @@ public partial class PhotoManagerViewModel : ObservableObject
 
         // PhotoWatcher からのリアルタイム通知を購読
         photoWatcher.PhotoAdded += OnPhotoAdded;
+
+        // 言語切替時にステータステキスト・日付範囲表示を再ローカライズする
+        LocalizationService.LanguageChanged += OnLanguageChanged;
+    }
+
+    /// <summary>言語切替時に表示テキストを現在のカルチャで再生成する</summary>
+    private void OnLanguageChanged()
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() =>
+        {
+            UpdateStatus();
+            UpdateDateRangeText();
+        });
+    }
+
+    /// <summary>保持している日付範囲を現在のカルチャで再フォーマットする</summary>
+    private void UpdateDateRangeText()
+    {
+        if (_photoMinDate.HasValue && _photoMaxDate.HasValue)
+        {
+            var culture = DateFormatHelper.GetCurrentCulture();
+            DateRangeText = $"{_photoMinDate.Value.ToString(DateFormatHelper.DateWithDay, culture)} ～ {_photoMaxDate.Value.ToString(DateFormatHelper.DateWithDay, culture)}";
+        }
+        else
+        {
+            DateRangeText = string.Empty;
+        }
     }
 
     // ── フィルターテキスト変更ハンドラ（クリア時に自動リロード） ──
@@ -398,6 +431,8 @@ public partial class PhotoManagerViewModel : ObservableObject
             {
                 HasNoPhotos = true;
                 StatusText = string.Empty;
+                _photoMinDate = null;
+                _photoMaxDate = null;
                 DateRangeText = string.Empty;
                 return;
             }
@@ -408,9 +443,9 @@ public partial class PhotoManagerViewModel : ObservableObject
 
             UpdateStatus();
 
-            var minDate = result.photos.Min(p => p.TakenAt);
-            var maxDate = result.photos.Max(p => p.TakenAt);
-            DateRangeText = $"{minDate.ToString(DateFormatHelper.DateWithDay, DateFormatHelper.JaCulture)} ～ {maxDate.ToString(DateFormatHelper.DateWithDay, DateFormatHelper.JaCulture)}";
+            _photoMinDate = result.photos.Min(p => p.TakenAt);
+            _photoMaxDate = result.photos.Max(p => p.TakenAt);
+            UpdateDateRangeText();
 
             // 訪問フィルター時はプレイヤー情報を設定
             if (result.filterByVisit)
@@ -429,7 +464,7 @@ public partial class PhotoManagerViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            StatusText = $"エラー: {ex.Message}";
+            StatusText = LocalizationService.GetString("Str_ErrorPrefix") + ex.Message;
         }
         finally
         {
@@ -442,7 +477,7 @@ public partial class PhotoManagerViewModel : ObservableObject
     private void UpdateStatus()
     {
         var count = PhotoGroups.Sum(g => g.Photos.Count);
-        StatusText = $"{count} 枚の写真を表示中";
+        StatusText = string.Format(LocalizationService.GetString("Str_PhotoCount"), count);
     }
 
     /// <summary>ファイルが存在しなくなった写真レコードを DB から削除する</summary>
@@ -566,7 +601,7 @@ public partial class PhotoManagerViewModel : ObservableObject
         var visit = await db.WorldVisits.FindAsync(SelectedPhoto.WorldVisitId.Value);
         if (visit == null)
         {
-            await _dialog.ShowInfoAsync("対応するアクティビティが見つかりませんでした。");
+            await _dialog.ShowInfoAsync(LocalizationService.GetString("Info_NoActivityForPhoto"));
             return;
         }
 

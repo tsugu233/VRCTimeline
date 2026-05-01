@@ -26,18 +26,18 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Vertical" VerticalAlignment="Top"
                             Margin="24,0,0,0">
-                    <Button Content="写真を表示" Command="{Binding ShowPhotosForVisitCommand}"
+                    <Button Content="{DynamicResource Activity_ShowPhotos}" Command="{Binding ShowPhotosForVisitCommand}"
                             Style="{StaticResource MaterialDesignFlatMidBgButton}"
                             IsEnabled="{Binding IsVisitSelected}"
                             Margin="0,0,0,6" />
-                    <Button Content="再参加" Command="{Binding RejoinSelectedInstanceCommand}"
+                    <Button Content="{DynamicResource Activity_Rejoin}" Command="{Binding RejoinSelectedInstanceCommand}"
                             IsEnabled="{Binding CanRejoinSelected}"
                             Style="{StaticResource MaterialDesignRaisedButton}" />
                 </StackPanel>
 
                 <StackPanel>
                     <DockPanel Margin="0,0,0,8">
-                        <TextBlock Text="参加プレイヤー"
+                        <TextBlock Text="{DynamicResource Activity_JoinedPlayers}"
                                    Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                                    VerticalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,0"
@@ -60,11 +60,11 @@
                             <TextBlock Text="{Binding SearchPlayerName}" VerticalAlignment="Center"
                                        FontWeight="Bold" FontSize="13" Margin="0,0,16,0" />
                             <TextBlock VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12">
-                                <Run Text="遭遇回数: " Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                <Run Text="{DynamicResource Activity_EncounterCount}" Foreground="{DynamicResource MaterialDesignBodyLight}" />
                                 <Run Text="{Binding PlayerEncounterCount, Mode=OneWay}" FontWeight="Bold" />
                             </TextBlock>
                             <TextBlock VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12">
-                                <Run Text="合計時間: " Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                <Run Text="{DynamicResource Activity_TotalTime}" Foreground="{DynamicResource MaterialDesignBodyLight}" />
                                 <Run Text="{Binding PlayerTotalTime, Mode=OneWay}" FontWeight="Bold" />
                             </TextBlock>
                         </StackPanel>
@@ -147,16 +147,16 @@
                     </Style>
                 </DataGrid.RowStyle>
                 <DataGrid.Columns>
-                    <DataGridTextColumn Header="日時"
+                    <DataGridTextColumn Header="{DynamicResource Col_DateTime}"
                         Binding="{Binding JoinedAtDisplay}"
                         Width="180" />
-                    <DataGridTextColumn Header="ワールド名"
+                    <DataGridTextColumn Header="{DynamicResource Col_WorldName}"
                         Binding="{Binding WorldName}" Width="*" />
-                    <DataGridTextColumn Header="滞在時間"
+                    <DataGridTextColumn Header="{DynamicResource Col_Duration}"
                         Binding="{Binding Duration}" Width="90" />
-                    <DataGridTextColumn Header="人数"
+                    <DataGridTextColumn Header="{DynamicResource Col_PlayerCount}"
                         Binding="{Binding PlayerCount}" Width="60" />
-                    <DataGridTemplateColumn Header="プレイヤー" Width="*">
+                    <DataGridTemplateColumn Header="{DynamicResource Col_Players}" Width="*">
                         <DataGridTemplateColumn.CellTemplate>
                             <DataTemplate>
                                 <ItemsControl ItemsSource="{Binding PlayerNames}">

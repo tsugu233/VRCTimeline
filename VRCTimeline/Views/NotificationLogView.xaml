@@ -57,7 +57,7 @@
                         </DataTemplate>
                     </DataGridTemplateColumn.CellTemplate>
                 </DataGridTemplateColumn>
-                <DataGridTextColumn Header="日時"
+                <DataGridTextColumn Header="{DynamicResource Col_DateTime}"
                     Binding="{Binding ReceivedAtDisplay}" Width="200" MinWidth="175">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
@@ -65,7 +65,7 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                <DataGridTextColumn Header="種類"
+                <DataGridTextColumn Header="{DynamicResource Col_Type}"
                     Binding="{Binding NotificationType}" Width="120" MinWidth="60">
                     <DataGridTextColumn.ElementStyle>
                         <Style TargetType="TextBlock">
@@ -73,7 +73,7 @@
                         </Style>
                     </DataGridTextColumn.ElementStyle>
                 </DataGridTextColumn>
-                <DataGridTemplateColumn Header="送信者" Width="*">
+                <DataGridTemplateColumn Header="{DynamicResource Col_Sender}" Width="*">
                     <DataGridTemplateColumn.CellTemplate>
                         <DataTemplate>
                             <Border Background="{DynamicResource MaterialDesignCardBackground}"

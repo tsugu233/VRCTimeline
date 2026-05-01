@@ -9,6 +9,13 @@ using VRCTimeline.Services.LogParser;
 
 namespace VRCTimeline.ViewModels;
 
+/// <summary>言語選択用の選択肢モデル</summary>
+public sealed class LanguageOption
+{
+    public string Code { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+}
+
 /// <summary>
 /// 設定画面の ViewModel。
 /// ログ・写真フォルダのパス、テーマ、起動設定などをバインドし、
@@ -79,6 +86,32 @@ public partial class SettingsViewModel : ObservableObject
     [ObservableProperty]
     private bool _showImportSection = true;
 
+    /// <summary>選択中の言語</summary>
+    private LanguageOption? _selectedLanguage;
+
+    /// <summary>選択可能な言語の一覧</summary>
+    public List<LanguageOption> AvailableLanguages { get; } =
+    [
+        new() { Code = "ja", DisplayName = "日本語" },
+        new() { Code = "en", DisplayName = "English" },
+        new() { Code = "ko", DisplayName = "한국어" },
+    ];
+
+    public LanguageOption? SelectedLanguage
+    {
+        get => _selectedLanguage;
+        set
+        {
+            if (!SetProperty(ref _selectedLanguage, value) || value == null) return;
+            if (!_suppressSave)
+            {
+                _settingsService.Settings.Language = value.Code;
+                LocalizationService.SetLanguage(value.Code);
+                _ = _settingsService.SaveAsync();
+            }
+        }
+    }
+
     /// <summary>変更時に自動保存するプロパティの名前一覧</summary>
     private static readonly HashSet<string> SaveableProperties =
     [
@@ -127,6 +160,9 @@ public partial class SettingsViewModel : ObservableObject
             IsDarkMode = s.IsDarkMode;
             AccentColorHex = s.AccentColorHex;
             ButtonTextColorHex = s.ButtonTextColorHex;
+            _selectedLanguage = AvailableLanguages.FirstOrDefault(l => l.Code == s.Language)
+                                 ?? AvailableLanguages[0];
+            OnPropertyChanged(nameof(SelectedLanguage));
         }
         finally
         {
@@ -156,6 +192,7 @@ public partial class SettingsViewModel : ObservableObject
             s.IsDarkMode = IsDarkMode;
             s.AccentColorHex = AccentColorHex;
             s.ButtonTextColorHex = ButtonTextColorHex;
+            s.Language = SelectedLanguage?.Code ?? string.Empty;
             await _settingsService.SaveAsync();
             UpdateStartupRegistry();
         }
@@ -195,7 +232,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "VRChatログフォルダを選択"
+            Title = LocalizationService.GetString("Str_BrowseLogFolder")
         };
         if (dialog.ShowDialog() == true)
             LogDirectory = dialog.FolderName;
@@ -210,7 +247,7 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = "写真フォルダを選択"
+            Title = LocalizationService.GetString("Str_BrowsePhotoFolder")
         };
         if (dialog.ShowDialog() != true) return;
 
@@ -267,16 +304,16 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFileDialog
         {
-            Title = "VRChatActivityLogViewerのデータベースを選択",
-            Filter = "SQLiteデータベース (*.db)|*.db|すべてのファイル (*.*)|*.*",
+            Title = LocalizationService.GetString("Str_SelectDatabase"),
+            Filter = LocalizationService.GetString("Str_SqliteFilter"),
             FileName = "VRChatActivityLog.db"
         };
 
         if (dialog.ShowDialog() != true) return;
 
         IsImporting = true;
-        ImportStatus = "インポート中...";
-        _loading.Show("インポート中、しばらくお待ちください。");
+        ImportStatus = LocalizationService.GetString("Str_Importing");
+        _loading.Show(LocalizationService.GetString("Str_ImportingMessage"));
         try
         {
             var service = new ActivityLogImportService();
@@ -290,7 +327,7 @@ public partial class SettingsViewModel : ObservableObject
         }
         catch (Exception ex)
         {
-            ImportStatus = $"エラー: {ex.Message}";
+            ImportStatus = LocalizationService.GetString("Str_ErrorPrefix") + ex.Message;
         }
         finally
         {
@@ -303,11 +340,13 @@ public partial class SettingsViewModel : ObservableObject
     [RelayCommand]
     private async Task ClearThumbnailCacheAsync()
     {
-        if (!await _dialog.ShowConfirmAsync("サムネイルキャッシュを削除しますか？"))
+        if (!await _dialog.ShowConfirmAsync(LocalizationService.GetString("Str_ConfirmClearCache")))
             return;
 
         VideoInfoService.ClearCache();
-        await _dialog.ShowInfoAsync("キャッシュを削除しました。", "完了");
+        await _dialog.ShowInfoAsync(
+            LocalizationService.GetString("Str_CacheCleared"),
+            LocalizationService.GetString("Str_Done"));
     }
 
     /// <summary>サムネイルキャッシュフォルダをエクスプローラーで開く</summary>

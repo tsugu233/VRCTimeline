@@ -1,6 +1,7 @@
 using System.IO;
 using System.IO.Pipes;
 using System.Windows;
+using System.Windows.Markup;
 using System.Windows.Media;
 using MaterialDesignColors;
 using MaterialDesignThemes.Wpf;
@@ -31,6 +32,12 @@ public partial class App : Application
 
     /// <summary>システムトレイアイコン</summary>
     private System.Windows.Forms.NotifyIcon? _notifyIcon;
+
+    /// <summary>トレイメニュー「表示」項目</summary>
+    private System.Windows.Forms.ToolStripMenuItem? _trayShowItem;
+
+    /// <summary>トレイメニュー「終了」項目</summary>
+    private System.Windows.Forms.ToolStripMenuItem? _trayExitItem;
 
     /// <summary>名前付きパイプサーバーのキャンセルトークン</summary>
     private CancellationTokenSource? _pipeCts;
@@ -81,6 +88,26 @@ public partial class App : Application
                 await EnsureMissingTablesAsync(db);
             }
 
+            // 言語の初期化（未設定の場合はシステムカルチャから自動検出して保存）
+            var langSettings = settingsService.Settings;
+            if (string.IsNullOrEmpty(langSettings.Language))
+            {
+                langSettings.Language = LocalizationService.DetectSystemLanguage();
+                await settingsService.SaveAsync();
+            }
+            LocalizationService.SetLanguage(langSettings.Language);
+
+            // WPF コントロール（Calendar 等）のデフォルト言語を現在のカルチャに合わせる。
+            // これにより以後新規作成される Calendar の曜日・月名表示が現在言語で初期化される。
+            try
+            {
+                FrameworkElement.LanguageProperty.OverrideMetadata(
+                    typeof(FrameworkElement),
+                    new FrameworkPropertyMetadata(
+                        XmlLanguage.GetLanguage(LocalizationService.GetCurrentCulture().IetfLanguageTag)));
+            }
+            catch { /* OverrideMetadata は型ごとに 1 度のみ呼び出し可能 */ }
+
             // テーマの適用
             ApplyTheme(settingsService.Settings.IsDarkMode,
                 settingsService.Settings.AccentColorHex,
@@ -106,8 +133,8 @@ public partial class App : Application
         }
         catch (Exception ex)
         {
-            MessageBox.Show($"アプリケーションの起動に失敗しました:\n{ex.Message}",
-                "エラー", MessageBoxButton.OK, MessageBoxImage.Error);
+            MessageBox.Show($"アプリケーションの起動に失敗しました / Failed to start:\n{ex.Message}",
+                "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
         }
     }
@@ -129,14 +156,36 @@ public partial class App : Application
 
         _notifyIcon.DoubleClick += (s, e) => ShowMainWindow(mainWindow);
 
-        var menu = new System.Windows.Forms.ContextMenuStrip();
-        menu.Items.Add("表示", null, (s, e) => ShowMainWindow(mainWindow));
-        menu.Items.Add("終了", null, (s, e) =>
+        _trayShowItem = new System.Windows.Forms.ToolStripMenuItem(
+            LocalizationService.GetString("Str_TrayShow"));
+        _trayShowItem.Click += (s, e) => ShowMainWindow(mainWindow);
+
+        _trayExitItem = new System.Windows.Forms.ToolStripMenuItem(
+            LocalizationService.GetString("Str_TrayExit"));
+        _trayExitItem.Click += (s, e) =>
         {
             _notifyIcon.Visible = false;
             Shutdown();
-        });
+        };
+
+        var menu = new System.Windows.Forms.ContextMenuStrip();
+        menu.Items.Add(_trayShowItem);
+        menu.Items.Add(_trayExitItem);
         _notifyIcon.ContextMenuStrip = menu;
+
+        LocalizationService.LanguageChanged += UpdateTrayMenuText;
+    }
+
+    /// <summary>言語変更時にトレイメニューのテキストを更新する</summary>
+    private void UpdateTrayMenuText()
+    {
+        Dispatcher.Invoke(() =>
+        {
+            if (_trayShowItem != null)
+                _trayShowItem.Text = LocalizationService.GetString("Str_TrayShow");
+            if (_trayExitItem != null)
+                _trayExitItem.Text = LocalizationService.GetString("Str_TrayExit");
+        });
     }
 
     /// <summary>メインウィンドウを表示してフォーカスを当てる</summary>
@@ -186,6 +235,7 @@ public partial class App : Application
     /// <summary>アプリケーション終了時のクリーンアップ処理</summary>
     protected override void OnExit(ExitEventArgs e)
     {
+        LocalizationService.LanguageChanged -= UpdateTrayMenuText;
         _pipeCts?.Cancel();
         if (_notifyIcon != null)
         {

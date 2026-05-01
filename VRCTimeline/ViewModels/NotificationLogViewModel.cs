@@ -24,9 +24,9 @@ public partial class NotificationLogViewModel : ObservableObject
     [ObservableProperty]
     private string _searchPlayerName = string.Empty;
 
-    /// <summary>通知種別フィルター（"すべて", "Invite" など）</summary>
+    /// <summary>通知種別フィルター（ローカライズされた "すべて" 相当文字列 or "Invite" など）</summary>
     [ObservableProperty]
-    private string _selectedTypeFilter = "すべて";
+    private string _selectedTypeFilter = string.Empty;
 
     /// <summary>表示期間の開始日</summary>
     [ObservableProperty]
@@ -39,13 +39,40 @@ public partial class NotificationLogViewModel : ObservableObject
     /// <summary>通知レコードの表示リスト</summary>
     public ObservableCollection<NotificationDisplayItem> Notifications { get; } = [];
 
-    /// <summary>通知種別フィルターの選択肢</summary>
-    public List<string> TypeFilters { get; } = ["すべて", "Invite", "Request Invite", "Boop"];
+    /// <summary>通知種別フィルターの選択肢（言語変更時に再構築される）</summary>
+    public ObservableCollection<string> TypeFilters { get; } = [];
 
     public NotificationLogViewModel(LoadingService loadingService)
     {
         _loading = loadingService;
+        RebuildTypeFilters();
+        LocalizationService.LanguageChanged += OnLanguageChanged;
     }
+
+    private void OnLanguageChanged()
+    {
+        var wasAll = IsAllFilter(SelectedTypeFilter);
+        RebuildTypeFilters();
+        if (wasAll)
+            SelectedTypeFilter = TypeFilters[0];
+    }
+
+    /// <summary>言語に合わせてフィルター選択肢を再構築する</summary>
+    private void RebuildTypeFilters()
+    {
+        TypeFilters.Clear();
+        TypeFilters.Add(LocalizationService.GetString("Filter_All"));
+        TypeFilters.Add("Invite");
+        TypeFilters.Add("Request Invite");
+        TypeFilters.Add("Boop");
+        if (string.IsNullOrEmpty(SelectedTypeFilter))
+            SelectedTypeFilter = TypeFilters[0];
+    }
+
+    /// <summary>「すべて」相当の選択かどうかを判定する（言語に依存しない）</summary>
+    private static bool IsAllFilter(string? filter)
+        => string.IsNullOrEmpty(filter)
+           || !new[] { "Invite", "Request Invite", "Boop" }.Contains(filter);
 
     /// <summary>初回の通知ログ読み込み</summary>
     public async Task InitializeAsync()
@@ -68,8 +95,8 @@ public partial class NotificationLogViewModel : ObservableObject
                 .Include(n => n.WorldVisit)
                 .Where(n => n.ReceivedAt >= FilterDateFrom && n.ReceivedAt <= FilterDateTo);
 
-            // 種別フィルター
-            if (SelectedTypeFilter != "すべて")
+            // 種別フィルター（"すべて" 相当かどうかは言語に依存しない IsAllFilter で判定）
+            if (!IsAllFilter(SelectedTypeFilter))
             {
                 var typeKey = SelectedTypeFilter switch
                 {
@@ -148,7 +175,7 @@ public class NotificationDisplayItem
     public string? WorldName { get; set; }
 
     /// <summary>受信日時の表示文字列（曜日・秒付き）</summary>
-    public string ReceivedAtDisplay => ReceivedAt.ToString(DateFormatHelper.DateWithDayAndSeconds, DateFormatHelper.JaCulture);
+    public string ReceivedAtDisplay => ReceivedAt.ToString(DateFormatHelper.DateWithDayAndSeconds, DateFormatHelper.GetCurrentCulture());
 
     /// <summary>通知種別に対応する MaterialDesign アイコン名</summary>
     public string TypeIcon => NotificationType switch

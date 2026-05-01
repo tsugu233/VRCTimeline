@@ -29,4 +29,7 @@ public class AppSettings
 
     /// <summary>ボタンテキストカラーの Hex 値</summary>
     public string ButtonTextColorHex { get; set; } = "#262626";
+
+    /// <summary>UI 言語コード ("ja" / "en" / "ko")。空文字の場合は初回起動時にシステム設定から自動検出する</summary>
+    public string Language { get; set; } = string.Empty;
 }

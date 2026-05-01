@@ -3,9 +3,11 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Input;
+using System.Windows.Markup;
 using System.Windows.Media;
 using System.Windows.Threading;
 using VRCTimeline.Helpers;
+using VRCTimeline.Services;
 
 namespace VRCTimeline.Controls;
 
@@ -20,6 +22,15 @@ public partial class FilterBarControl : UserControl
     public FilterBarControl()
     {
         InitializeComponent();
+        UpdateCalendarLanguage();
+        LocalizationService.LanguageChanged += UpdateCalendarLanguage;
+        Unloaded += (_, _) => LocalizationService.LanguageChanged -= UpdateCalendarLanguage;
+    }
+
+    /// <summary>言語変更時にカレンダーのロケールを更新する</summary>
+    private void UpdateCalendarLanguage()
+    {
+        this.Language = XmlLanguage.GetLanguage(DateFormatHelper.GetCurrentCulture().Name);
     }
 
     // ── 日付範囲フィルター ──
@@ -205,14 +216,14 @@ public partial class FilterBarControl : UserControl
         tb.TextChanged += (_, _) =>
         {
             if (!dp.SelectedDate.HasValue) return;
-            var expected = dp.SelectedDate.Value.ToString("yyyy/MM/dd (ddd)", DateFormatHelper.JaCulture);
+            var expected = dp.SelectedDate.Value.ToString("yyyy/MM/dd (ddd)", DateFormatHelper.GetCurrentCulture());
             if (tb.Text != expected)
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, () => tb.Text = expected);
         };
 
         if (dp.SelectedDate.HasValue)
         {
-            var text = dp.SelectedDate.Value.ToString("yyyy/MM/dd (ddd)", DateFormatHelper.JaCulture);
+            var text = dp.SelectedDate.Value.ToString("yyyy/MM/dd (ddd)", DateFormatHelper.GetCurrentCulture());
             Dispatcher.BeginInvoke(DispatcherPriority.Background, () => tb.Text = text);
         }
 
@@ -224,58 +235,144 @@ public partial class FilterBarControl : UserControl
                 var popup = FindVisualChild<Popup>(dp);
                 if (popup?.Child is not FrameworkElement popupContent) return;
 
-                var darkBg = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D));
-
-                foreach (var border in FindVisualChildren<Border>(popupContent))
-                {
-                    if (border.Background is SolidColorBrush bg && bg.Color.R > 200)
-                        border.Background = darkBg;
-                }
-
-                foreach (var ci in FindVisualChildren<CalendarItem>(popupContent))
-                {
-                    ci.Background = darkBg;
-                    ci.BorderThickness = new Thickness(0);
-                    ci.Foreground = Brushes.White;
-                }
-
-                foreach (var tb in FindVisualChildren<TextBlock>(popupContent))
-                    tb.Foreground = Brushes.White;
-
-                foreach (var btn in FindVisualChildren<Button>(popupContent))
-                    btn.Foreground = Brushes.White;
-
-                foreach (var path in FindVisualChildren<System.Windows.Shapes.Path>(popupContent))
-                    path.Fill = Brushes.White;
-
-                foreach (var ci in FindVisualChildren<CalendarItem>(popupContent))
-                {
-                    var headerBtn = ci.Template?.FindName("PART_HeaderButton", ci) as Button;
-                    var prevBtn = ci.Template?.FindName("PART_PreviousButton", ci) as Button;
-                    var nextBtn = ci.Template?.FindName("PART_NextButton", ci) as Button;
-
-                    if (headerBtn != null) { headerBtn.MinHeight = 40; headerBtn.FontSize = 15; }
-                    if (prevBtn != null) prevBtn.MinHeight = 40;
-                    if (nextBtn != null) nextBtn.MinHeight = 40;
-
-                    if (headerBtn?.Parent is FrameworkElement headerPanel)
-                        headerPanel.Margin = new Thickness(4, 8, 4, 12);
-                }
-
+                // Calendar の曜日・月名は CalendarItem.OnApplyTemplate() 内でキャッシュされ、
+                // Language プロパティを後から変更しても更新されない。
+                // ここでビジュアルツリーから直接 TextBlock を見つけて現在のカルチャで上書きする。
                 var calendar = FindVisualChild<System.Windows.Controls.Calendar>(popupContent);
+                if (calendar != null)
+                {
+                    var lang = XmlLanguage.GetLanguage(DateFormatHelper.GetCurrentCulture().IetfLanguageTag);
+                    calendar.Language = lang;
+                    dp.Language = lang;
+                    RefreshCalendarLocalization(calendar);
+
+                    // 月送り・モード変更でヘッダーが再描画されるたびにローカライズ補正する
+                    // （Calendar インスタンスごとに 1 度だけ購読する）
+                    if (calendar.Tag as string != "LocalizationHooked")
+                    {
+                        var capturedCalendar = calendar;
+                        calendar.DisplayDateChanged += (_, _) =>
+                            Dispatcher.BeginInvoke(DispatcherPriority.Loaded,
+                                () => RefreshCalendarLocalization(capturedCalendar));
+                        calendar.DisplayModeChanged += (_, _) =>
+                            Dispatcher.BeginInvoke(DispatcherPriority.Loaded,
+                                () => RefreshCalendarLocalization(capturedCalendar));
+                        calendar.Tag = "LocalizationHooked";
+                    }
+                }
+
+                ApplyCalendarDarkTheme(popupContent);
+
                 if (calendar != null)
                 {
                     calendar.LayoutTransform = new ScaleTransform(1.3, 1.3);
                     calendar.HorizontalAlignment = HorizontalAlignment.Center;
                 }
 
-                if (popup != null)
-                {
-                    popup.Placement = PlacementMode.Bottom;
-                    popup.HorizontalOffset = -(dp.ActualWidth * 0.3);
-                }
+                popup.Placement = PlacementMode.Bottom;
+                popup.HorizontalOffset = -(dp.ActualWidth * 0.3);
             });
         };
+    }
+
+    /// <summary>
+    /// カレンダーポップアップにダークテーマを適用する。
+    /// </summary>
+    private static void ApplyCalendarDarkTheme(FrameworkElement popupContent)
+    {
+        var darkBg = new SolidColorBrush(Color.FromRgb(0x2D, 0x2D, 0x2D));
+
+        foreach (var border in FindVisualChildren<Border>(popupContent))
+        {
+            if (border.Background is SolidColorBrush bg && bg.Color.R > 200)
+                border.Background = darkBg;
+        }
+
+        foreach (var ci in FindVisualChildren<CalendarItem>(popupContent))
+        {
+            ci.Background = darkBg;
+            ci.BorderThickness = new Thickness(0);
+            ci.Foreground = Brushes.White;
+        }
+
+        foreach (var tb in FindVisualChildren<TextBlock>(popupContent))
+            tb.Foreground = Brushes.White;
+
+        foreach (var btn in FindVisualChildren<Button>(popupContent))
+            btn.Foreground = Brushes.White;
+
+        foreach (var path in FindVisualChildren<System.Windows.Shapes.Path>(popupContent))
+            path.Fill = Brushes.White;
+
+        foreach (var ci in FindVisualChildren<CalendarItem>(popupContent))
+        {
+            var headerBtn = ci.Template?.FindName("PART_HeaderButton", ci) as Button;
+            var prevBtn = ci.Template?.FindName("PART_PreviousButton", ci) as Button;
+            var nextBtn = ci.Template?.FindName("PART_NextButton", ci) as Button;
+
+            if (headerBtn != null) { headerBtn.MinHeight = 40; headerBtn.FontSize = 15; }
+            if (prevBtn != null) prevBtn.MinHeight = 40;
+            if (nextBtn != null) nextBtn.MinHeight = 40;
+
+            if (headerBtn?.Parent is FrameworkElement headerPanel)
+                headerPanel.Margin = new Thickness(4, 8, 4, 12);
+        }
+    }
+
+    /// <summary>
+    /// Calendar の曜日ヘッダーとヘッダーボタン（月/年表示）のテキストを
+    /// 現在のカルチャに合わせて手動で書き換える。
+    /// WPF Calendar は CalendarItem.OnApplyTemplate() 時点で曜日名・月名をキャッシュするため、
+    /// Language プロパティを後から変更しても自動更新されない問題への対処。
+    /// </summary>
+    private static void RefreshCalendarLocalization(System.Windows.Controls.Calendar calendar)
+    {
+        var ci = FindVisualChild<CalendarItem>(calendar);
+        if (ci?.Template == null) return;
+
+        var culture = DateFormatHelper.GetCurrentCulture();
+
+        // 曜日ヘッダー（MonthView の Row 0）
+        if (ci.Template.FindName("PART_MonthView", ci) is Grid monthView)
+        {
+            var firstDay = (int)culture.DateTimeFormat.FirstDayOfWeek;
+            var dayNames = culture.DateTimeFormat.AbbreviatedDayNames;
+
+            var headerCells = monthView.Children
+                .OfType<UIElement>()
+                .Where(c => Grid.GetRow(c) == 0)
+                .OrderBy(c => Grid.GetColumn(c))
+                .ToList();
+
+            // 週番号列がある場合は先頭を除外
+            var dayCells = headerCells.Count > 7
+                ? headerCells.Skip(headerCells.Count - 7).ToList()
+                : headerCells;
+
+            for (int i = 0; i < dayCells.Count && i < 7; i++)
+            {
+                var element = dayCells[i];
+                var tb = element as TextBlock ?? FindVisualChild<TextBlock>(element);
+                if (tb != null)
+                {
+                    var dayIdx = (firstDay + i) % 7;
+                    tb.Text = dayNames[dayIdx];
+                }
+            }
+        }
+
+        // ヘッダーボタン（月/年表示）
+        if (ci.Template.FindName("PART_HeaderButton", ci) is Button headerBtn)
+        {
+            var displayDate = calendar.DisplayDate;
+            headerBtn.Content = calendar.DisplayMode switch
+            {
+                CalendarMode.Month => displayDate.ToString("Y", culture),
+                CalendarMode.Year => displayDate.ToString("yyyy", culture),
+                CalendarMode.Decade => $"{displayDate.Year - displayDate.Year % 10} - {displayDate.Year - displayDate.Year % 10 + 9}",
+                _ => headerBtn.Content
+            };
+        }
     }
 
     /// <summary>ビジュアルツリーから指定型の全子要素を列挙する</summary>

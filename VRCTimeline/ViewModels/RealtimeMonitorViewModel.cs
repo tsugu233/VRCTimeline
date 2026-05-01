@@ -33,9 +33,9 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     /// <summary>自分のユーザーID</summary>
     private string _selfPlayerUserId = "";
 
-    /// <summary>現在のワールド名（未接続時は "未接続"）</summary>
+    /// <summary>現在のワールド名（未接続時はローカライズされた "未接続" 相当文字列）</summary>
     [ObservableProperty]
-    private string _currentWorldName = "未接続";
+    private string _currentWorldName = string.Empty;
 
     /// <summary>現在のインスタンスID</summary>
     [ObservableProperty]
@@ -63,6 +63,14 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     {
         _settingsService = settingsService;
         _selfPlayer = selfPlayerService;
+        CurrentWorldName = LocalizationService.GetString("Str_NotConnected");
+        LocalizationService.LanguageChanged += OnLanguageChanged;
+    }
+
+    private void OnLanguageChanged()
+    {
+        if (_logWatcher == null)
+            CurrentWorldName = LocalizationService.GetString("Str_NotConnected");
     }
 
     /// <summary>
@@ -82,7 +90,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         var state = _logWatcher.ParseCurrentState();
         if (state != null)
         {
-            CurrentWorldName = state.WorldName ?? "未接続";
+            CurrentWorldName = state.WorldName ?? LocalizationService.GetString("Str_NotConnected");
             CurrentInstanceId = state.InstanceId ?? string.Empty;
             CurrentPlayers.Clear();
             foreach (var player in state.CurrentPlayers)
@@ -130,7 +138,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     {
         StopMonitoring();
         await CloseCurrentWorldVisitAsync();
-        CurrentWorldName = "未接続";
+        CurrentWorldName = LocalizationService.GetString("Str_NotConnected");
         CurrentInstanceId = string.Empty;
         CurrentPlayers.Clear();
         PlayerCount = 0;
@@ -138,7 +146,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         {
             Timestamp = DateTime.Now,
             Type = LogEntryType.Info,
-            Message = "VRChatが終了しました"
+            Message = LocalizationService.GetString("Log_VRChatExited")
         });
     }
 
@@ -194,7 +202,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 if (entry.PlayerName != null)
                 {
                     if (entry.PlayerName == _selfPlayerName)
-                        entry.Message = $"{CurrentWorldName} に入室しました";
+                        entry.Message = string.Format(LocalizationService.GetString("Log_SelfJoined"), CurrentWorldName);
                     if (!CurrentPlayers.Contains(entry.PlayerName))
                     {
                         CurrentPlayers.Add(entry.PlayerName);
@@ -209,7 +217,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 if (entry.PlayerName != null)
                 {
                     if (entry.PlayerName == _selfPlayerName)
-                        entry.Message = $"{CurrentWorldName} から退室しました";
+                        entry.Message = string.Format(LocalizationService.GetString("Log_SelfLeft"), CurrentWorldName);
                     CurrentPlayers.Remove(entry.PlayerName);
                     PlayerCount = CurrentPlayers.Count;
                     await SavePlayerLeftAsync(entry);
@@ -380,6 +388,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         StopMonitoring();
+        LocalizationService.LanguageChanged -= OnLanguageChanged;
         GC.SuppressFinalize(this);
     }
 }

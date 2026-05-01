@@ -38,15 +38,15 @@
             <DockPanel>
                 <StackPanel DockPanel.Dock="Right" Orientation="Vertical" VerticalAlignment="Top"
                             Margin="24,0,0,0">
-                    <Button Content="アクティビティを表示" Command="{Binding ShowActivityForVisitCommand}"
+                    <Button Content="{DynamicResource Photo_ShowActivity}" Command="{Binding ShowActivityForVisitCommand}"
                             Style="{StaticResource MaterialDesignFlatMidBgButton}"
                             IsEnabled="{Binding IsPhotoSelected}"
                             Margin="0,0,0,6" />
-                    <Button Content="写真を開く" Command="{Binding OpenSelectedPhotoCommand}"
+                    <Button Content="{DynamicResource Photo_OpenPhoto}" Command="{Binding OpenSelectedPhotoCommand}"
                             Style="{StaticResource MaterialDesignRaisedButton}"
                             IsEnabled="{Binding IsPhotoSelected}"
                             Margin="0,0,0,6" />
-                    <Button Content="フォルダを開く" Command="{Binding OpenPhotoFolderCommand}"
+                    <Button Content="{DynamicResource Photo_OpenFolder}" Command="{Binding OpenPhotoFolderCommand}"
                             Style="{StaticResource MaterialDesignRaisedButton}"
                             IsEnabled="{Binding IsPhotoSelected}" />
                 </StackPanel>
@@ -59,7 +59,7 @@
                     </Grid.RowDefinitions>
 
                     <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,8">
-                        <TextBlock Text="参加プレイヤー"
+                        <TextBlock Text="{DynamicResource Photo_JoinedPlayers}"
                                    Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                                    VerticalAlignment="Center" />
                         <StackPanel Orientation="Horizontal" Margin="20,0,0,0"
@@ -129,7 +129,7 @@
         </materialDesign:Card>
 
         <!-- No Photos Message -->
-        <TextBlock Grid.Row="3" Text="写真が見つかりません"
+        <TextBlock Grid.Row="3" Text="{DynamicResource Photo_NoPhotos}"
                    Visibility="{Binding HasNoPhotos, Converter={StaticResource BoolToVis}}"
                    HorizontalAlignment="Center" VerticalAlignment="Center"
                    Style="{StaticResource MaterialDesignHeadline6TextBlock}"

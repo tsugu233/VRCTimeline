@@ -45,10 +45,10 @@
                         <TextBlock VerticalAlignment="Center" FontSize="13">
                             <TextBlock.Style>
                                 <Style TargetType="TextBlock">
-                                    <Setter Property="Text" Value="VRChat: 未検出" />
+                                    <Setter Property="Text" Value="{DynamicResource VRChat_NotDetected}" />
                                     <Style.Triggers>
                                         <DataTrigger Binding="{Binding IsVRChatRunning}" Value="True">
-                                            <Setter Property="Text" Value="VRChat: 実行中" />
+                                            <Setter Property="Text" Value="{DynamicResource VRChat_Running}" />
                                         </DataTrigger>
                                     </Style.Triggers>
                                 </Style>
@@ -62,42 +62,42 @@
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Pulse" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="リアルタイム" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Realtime}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem Padding="16,12">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="History" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="アクティビティ" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Activity}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem Padding="16,12">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Image" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="写真" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Photos}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem Padding="16,12">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Bell" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="通知履歴" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Notifications}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem Padding="16,12">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Play" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="動画履歴" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Videos}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                         <ListBoxItem Padding="16,12">
                             <StackPanel Orientation="Horizontal">
                                 <materialDesign:PackIcon Kind="Cog" Width="24" Height="24"
                                                           Margin="0,0,14,0" VerticalAlignment="Center" />
-                                <TextBlock Text="設定" VerticalAlignment="Center" FontSize="14" />
+                                <TextBlock Text="{DynamicResource Nav_Settings}" VerticalAlignment="Center" FontSize="14" />
                             </StackPanel>
                         </ListBoxItem>
                     </ListBox>

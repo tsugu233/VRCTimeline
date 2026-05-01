@@ -82,20 +82,20 @@
     <materialDesign:Card Padding="16" Margin="0,0,0,12">
         <WrapPanel>
             <DatePicker SelectedDate="{Binding FilterDateFrom, ElementName=Root}"
-                        materialDesign:HintAssist.Hint="開始日"
+                        materialDesign:HintAssist.Hint="{DynamicResource Filter_StartDate}"
                         CalendarStyle="{StaticResource DarkCalendar}"
                         Width="150" Margin="0,0,8,4"
                         Loaded="DatePicker_Loaded" />
             <TextBlock Text="～" VerticalAlignment="Center" Margin="0,0,8,4"
                        FontSize="16" />
             <DatePicker SelectedDate="{Binding FilterDateTo, ElementName=Root}"
-                        materialDesign:HintAssist.Hint="終了日"
+                        materialDesign:HintAssist.Hint="{DynamicResource Filter_EndDate}"
                         CalendarStyle="{StaticResource DarkCalendar}"
                         Width="150" Margin="0,0,20,4"
                         Loaded="DatePicker_Loaded" />
 
             <TextBox Text="{Binding PlayerFilterText, ElementName=Root, UpdateSourceTrigger=PropertyChanged}"
-                     materialDesign:HintAssist.Hint="プレイヤー名で絞り込み"
+                     materialDesign:HintAssist.Hint="{DynamicResource Filter_PlayerName}"
                      materialDesign:TextFieldAssist.HasClearButton="True"
                      Width="220" Margin="0,0,12,4"
                      Visibility="{Binding ShowPlayerFilter, ElementName=Root, Converter={StaticResource BoolToVis}}">
@@ -105,7 +105,7 @@
             </TextBox>
 
             <TextBox Text="{Binding WorldFilterText, ElementName=Root, UpdateSourceTrigger=PropertyChanged}"
-                     materialDesign:HintAssist.Hint="ワールド名で絞り込み"
+                     materialDesign:HintAssist.Hint="{DynamicResource Filter_WorldName}"
                      materialDesign:TextFieldAssist.HasClearButton="True"
                      Width="220" Margin="0,0,12,4"
                      Visibility="{Binding ShowWorldFilter, ElementName=Root, Converter={StaticResource BoolToVis}}">
@@ -115,7 +115,7 @@
             </TextBox>
 
             <TextBox Text="{Binding VideoTitleFilterText, ElementName=Root, UpdateSourceTrigger=PropertyChanged}"
-                     materialDesign:HintAssist.Hint="動画タイトルで絞り込み"
+                     materialDesign:HintAssist.Hint="{DynamicResource Filter_VideoTitle}"
                      materialDesign:TextFieldAssist.HasClearButton="True"
                      Width="220" Margin="0,0,12,4"
                      Visibility="{Binding ShowVideoTitleFilter, ElementName=Root, Converter={StaticResource BoolToVis}}">
@@ -126,11 +126,11 @@
 
             <ComboBox ItemsSource="{Binding TypeFilterItems, ElementName=Root}"
                       SelectedItem="{Binding SelectedTypeFilter, ElementName=Root}"
-                      materialDesign:HintAssist.Hint="種類"
+                      materialDesign:HintAssist.Hint="{DynamicResource Filter_Type}"
                       Width="140" Margin="0,0,12,4"
                       Visibility="{Binding ShowTypeFilter, ElementName=Root, Converter={StaticResource BoolToVis}}" />
 
-            <Button Content="検索" Command="{Binding SearchCommand, ElementName=Root}"
+            <Button Content="{DynamicResource Filter_Search}" Command="{Binding SearchCommand, ElementName=Root}"
                     Style="{StaticResource MaterialDesignRaisedButton}"
                     Margin="0,0,0,4" />
 

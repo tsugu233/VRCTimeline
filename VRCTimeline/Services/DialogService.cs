@@ -15,16 +15,18 @@ public class DialogService
     private const string DialogHostId = "RootDialogHost";
 
     /// <summary>はい/いいえの確認ダイアログを表示し、ユーザーの選択を返す</summary>
-    public async Task<bool> ShowConfirmAsync(string message, string title = "確認")
+    public async Task<bool> ShowConfirmAsync(string message, string? title = null)
     {
+        title ??= LocalizationService.GetString("Str_Confirm");
         var content = CreateDialogContent(title, message, isConfirm: true);
         var result = await DialogHost.Show(content, DialogHostId);
         return result is true;
     }
 
     /// <summary>OK ボタンのみの情報ダイアログを表示する</summary>
-    public async Task ShowInfoAsync(string message, string title = "情報")
+    public async Task ShowInfoAsync(string message, string? title = null)
     {
+        title ??= LocalizationService.GetString("Str_Info");
         var content = CreateDialogContent(title, message, isConfirm: false);
         await DialogHost.Show(content, DialogHostId);
     }
@@ -60,7 +62,7 @@ public class DialogService
         {
             var noButton = new Button
             {
-                Content = "いいえ",
+                Content = LocalizationService.GetString("Str_No"),
                 MinWidth = 80,
                 Margin = new Thickness(0, 0, 8, 0),
                 Command = DialogHost.CloseDialogCommand,
@@ -70,7 +72,7 @@ public class DialogService
 
             var yesButton = new Button
             {
-                Content = "はい",
+                Content = LocalizationService.GetString("Str_Yes"),
                 MinWidth = 80,
                 Command = DialogHost.CloseDialogCommand,
                 CommandParameter = true
@@ -84,7 +86,7 @@ public class DialogService
         {
             var okButton = new Button
             {
-                Content = "OK",
+                Content = LocalizationService.GetString("Str_OK"),
                 Command = DialogHost.CloseDialogCommand,
                 CommandParameter = true
             };

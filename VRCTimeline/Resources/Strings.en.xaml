@@ -1,0 +1,107 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- Navigation -->
+    <sys:String x:Key="Nav_Realtime">Realtime</sys:String>
+    <sys:String x:Key="Nav_Activity">Activity</sys:String>
+    <sys:String x:Key="Nav_Photos">Photos</sys:String>
+    <sys:String x:Key="Nav_Notifications">Notifications</sys:String>
+    <sys:String x:Key="Nav_Videos">Videos</sys:String>
+    <sys:String x:Key="Nav_Settings">Settings</sys:String>
+    <sys:String x:Key="VRChat_NotDetected">VRChat: Not Running</sys:String>
+    <sys:String x:Key="VRChat_Running">VRChat: Running</sys:String>
+    <!-- Realtime Monitor -->
+    <sys:String x:Key="Realtime_CurrentWorld">Current World</sys:String>
+    <sys:String x:Key="Realtime_JoinedPlayers">Players in Instance</sys:String>
+    <sys:String x:Key="Realtime_Log">Log</sys:String>
+    <sys:String x:Key="Str_PlayerUnit"> players</sys:String>
+    <!-- Activity History -->
+    <sys:String x:Key="Activity_ShowPhotos">Show Photos</sys:String>
+    <sys:String x:Key="Activity_Rejoin">Rejoin</sys:String>
+    <sys:String x:Key="Activity_JoinedPlayers">Players</sys:String>
+    <sys:String x:Key="Activity_EncounterCount">Encounters: </sys:String>
+    <sys:String x:Key="Activity_TotalTime">Total Time: </sys:String>
+    <!-- Photos -->
+    <sys:String x:Key="Photo_ShowActivity">Show Activity</sys:String>
+    <sys:String x:Key="Photo_OpenPhoto">Open Photo</sys:String>
+    <sys:String x:Key="Photo_OpenFolder">Open Folder</sys:String>
+    <sys:String x:Key="Photo_JoinedPlayers">Players</sys:String>
+    <sys:String x:Key="Photo_NoPhotos">No Photos Found</sys:String>
+    <!-- Settings -->
+    <sys:String x:Key="Settings_DirectorySettings">Directory Settings</sys:String>
+    <sys:String x:Key="Settings_VRChatLogFolder">VRChat Log Folder</sys:String>
+    <sys:String x:Key="Settings_Browse">Browse</sys:String>
+    <sys:String x:Key="Settings_PhotoFolder">Photo Folder</sys:String>
+    <sys:String x:Key="Settings_AppearanceSettings">Appearance</sys:String>
+    <sys:String x:Key="Settings_DarkMode">Dark Mode</sys:String>
+    <sys:String x:Key="Settings_Change">Change</sys:String>
+    <sys:String x:Key="Settings_AccentColor">Accent Color</sys:String>
+    <sys:String x:Key="Settings_ButtonTextColor">Button Text Color</sys:String>
+    <sys:String x:Key="Settings_AppSettings">App Settings</sys:String>
+    <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">Show window when VRChat launches</sys:String>
+    <sys:String x:Key="Settings_LaunchOnStartup">Launch on Windows startup</sys:String>
+    <sys:String x:Key="Settings_MinimizeOnStartup">Minimize on launch</sys:String>
+    <sys:String x:Key="Settings_LanguageSettings">Language</sys:String>
+    <sys:String x:Key="Settings_DataManagement">Data Management</sys:String>
+    <sys:String x:Key="Settings_ImportTitle">Import from VRChatActivityLogViewer</sys:String>
+    <sys:String x:Key="Settings_ImportDescription">Import world visit history and player encounter data from the database.&#x0a;Please select "VRChatActivityLog.db".</sys:String>
+    <sys:String x:Key="Settings_ImportButton">Import Data</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCache">Thumbnail Cache</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCacheDescription">You can delete the video thumbnail cache folder.&#x0a;Entries beyond the 50 most recent are deleted automatically.</sys:String>
+    <sys:String x:Key="Settings_ClearCache">Clear Cache</sys:String>
+    <sys:String x:Key="Settings_OpenFolder">Open Folder</sys:String>
+    <sys:String x:Key="Settings_PCMigration">PC Migration</sys:String>
+    <sys:String x:Key="Settings_PCMigrationDescription">Opens the database storage folder.&#x0a;When migrating PCs, copy "vrchat_activity.db" to the same folder on the new PC.</sys:String>
+    <!-- DataGrid Columns -->
+    <sys:String x:Key="Col_DateTime">Date/Time</sys:String>
+    <sys:String x:Key="Col_WorldName">World Name</sys:String>
+    <sys:String x:Key="Col_Duration">Duration</sys:String>
+    <sys:String x:Key="Col_PlayerCount">Players</sys:String>
+    <sys:String x:Key="Col_Players">Players</sys:String>
+    <sys:String x:Key="Col_Type">Type</sys:String>
+    <sys:String x:Key="Col_Sender">Sender</sys:String>
+    <!-- Filter Bar -->
+    <sys:String x:Key="Filter_StartDate">Start Date</sys:String>
+    <sys:String x:Key="Filter_EndDate">End Date</sys:String>
+    <sys:String x:Key="Filter_PlayerName">Filter by player name</sys:String>
+    <sys:String x:Key="Filter_WorldName">Filter by world name</sys:String>
+    <sys:String x:Key="Filter_VideoTitle">Filter by video title</sys:String>
+    <sys:String x:Key="Filter_Type">Type</sys:String>
+    <sys:String x:Key="Filter_All">All</sys:String>
+    <sys:String x:Key="Filter_Search">Search</sys:String>
+    <!-- Realtime / Log messages -->
+    <sys:String x:Key="Str_NotConnected">Not Connected</sys:String>
+    <sys:String x:Key="Log_WorldJoined">Joined world: </sys:String>
+    <sys:String x:Key="Log_InstanceConnected">Connected to instance</sys:String>
+    <sys:String x:Key="Log_PlayerJoined">{0} joined</sys:String>
+    <sys:String x:Key="Log_PlayerLeft">{0} left</sys:String>
+    <sys:String x:Key="Log_Notification">Received {1} from {0}</sys:String>
+    <sys:String x:Key="Log_VideoPlayback">Video playback: </sys:String>
+    <sys:String x:Key="Log_SelfJoined">Joined {0}</sys:String>
+    <sys:String x:Key="Log_SelfLeft">Left {0}</sys:String>
+    <sys:String x:Key="Log_VRChatExited">VRChat has exited</sys:String>
+    <!-- Misc -->
+    <sys:String x:Key="Str_StayingInWorld">Staying</sys:String>
+    <sys:String x:Key="Confirm_Rejoin">Rejoin "{0}"?</sys:String>
+    <sys:String x:Key="Info_NoPhotosForVisit">No photos found for this visit.</sys:String>
+    <sys:String x:Key="Info_NoActivityForPhoto">No matching activity found.</sys:String>
+    <sys:String x:Key="Str_PhotoCount">Showing {0} photos</sys:String>
+    <!-- C# / Dialog strings -->
+    <sys:String x:Key="Str_BrowseLogFolder">Select VRChat Log Folder</sys:String>
+    <sys:String x:Key="Str_BrowsePhotoFolder">Select Photo Folder</sys:String>
+    <sys:String x:Key="Str_Importing">Importing...</sys:String>
+    <sys:String x:Key="Str_ImportingMessage">Importing, please wait.</sys:String>
+    <sys:String x:Key="Str_ErrorPrefix">Error: </sys:String>
+    <sys:String x:Key="Str_SelectDatabase">Select VRChatActivityLogViewer Database</sys:String>
+    <sys:String x:Key="Str_SqliteFilter">SQLite Database (*.db)|*.db|All Files (*.*)|*.*</sys:String>
+    <sys:String x:Key="Str_ConfirmClearCache">Delete thumbnail cache?</sys:String>
+    <sys:String x:Key="Str_CacheCleared">Cache cleared.</sys:String>
+    <sys:String x:Key="Str_Done">Done</sys:String>
+    <sys:String x:Key="Str_Confirm">Confirm</sys:String>
+    <sys:String x:Key="Str_Info">Information</sys:String>
+    <sys:String x:Key="Str_Yes">Yes</sys:String>
+    <sys:String x:Key="Str_No">No</sys:String>
+    <sys:String x:Key="Str_OK">OK</sys:String>
+    <sys:String x:Key="Str_TrayShow">Show</sys:String>
+    <sys:String x:Key="Str_TrayExit">Exit</sys:String>
+</ResourceDictionary>

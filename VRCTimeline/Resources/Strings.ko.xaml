@@ -1,0 +1,107 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:sys="clr-namespace:System;assembly=mscorlib">
+    <!-- Navigation -->
+    <sys:String x:Key="Nav_Realtime">실시간</sys:String>
+    <sys:String x:Key="Nav_Activity">활동 기록</sys:String>
+    <sys:String x:Key="Nav_Photos">사진</sys:String>
+    <sys:String x:Key="Nav_Notifications">알림 기록</sys:String>
+    <sys:String x:Key="Nav_Videos">동영상 기록</sys:String>
+    <sys:String x:Key="Nav_Settings">설정</sys:String>
+    <sys:String x:Key="VRChat_NotDetected">VRChat: 미감지</sys:String>
+    <sys:String x:Key="VRChat_Running">VRChat: 실행 중</sys:String>
+    <!-- Realtime Monitor -->
+    <sys:String x:Key="Realtime_CurrentWorld">현재 월드</sys:String>
+    <sys:String x:Key="Realtime_JoinedPlayers">참가 중인 플레이어</sys:String>
+    <sys:String x:Key="Realtime_Log">로그</sys:String>
+    <sys:String x:Key="Str_PlayerUnit"> 명</sys:String>
+    <!-- Activity History -->
+    <sys:String x:Key="Activity_ShowPhotos">사진 보기</sys:String>
+    <sys:String x:Key="Activity_Rejoin">재참가</sys:String>
+    <sys:String x:Key="Activity_JoinedPlayers">참가 플레이어</sys:String>
+    <sys:String x:Key="Activity_EncounterCount">조우 횟수: </sys:String>
+    <sys:String x:Key="Activity_TotalTime">총 시간: </sys:String>
+    <!-- Photos -->
+    <sys:String x:Key="Photo_ShowActivity">활동 보기</sys:String>
+    <sys:String x:Key="Photo_OpenPhoto">사진 열기</sys:String>
+    <sys:String x:Key="Photo_OpenFolder">폴더 열기</sys:String>
+    <sys:String x:Key="Photo_JoinedPlayers">참가 플레이어</sys:String>
+    <sys:String x:Key="Photo_NoPhotos">사진을 찾을 수 없습니다</sys:String>
+    <!-- Settings -->
+    <sys:String x:Key="Settings_DirectorySettings">디렉토리 설정</sys:String>
+    <sys:String x:Key="Settings_VRChatLogFolder">VRChat 로그 폴더</sys:String>
+    <sys:String x:Key="Settings_Browse">찾아보기</sys:String>
+    <sys:String x:Key="Settings_PhotoFolder">사진 폴더</sys:String>
+    <sys:String x:Key="Settings_AppearanceSettings">외관 설정</sys:String>
+    <sys:String x:Key="Settings_DarkMode">다크 모드</sys:String>
+    <sys:String x:Key="Settings_Change">변경</sys:String>
+    <sys:String x:Key="Settings_AccentColor">강조 색상</sys:String>
+    <sys:String x:Key="Settings_ButtonTextColor">버튼 텍스트 색상</sys:String>
+    <sys:String x:Key="Settings_AppSettings">앱 설정</sys:String>
+    <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">VRChat 감지 시 창 표시</sys:String>
+    <sys:String x:Key="Settings_LaunchOnStartup">Windows 시작 시 실행</sys:String>
+    <sys:String x:Key="Settings_MinimizeOnStartup">시작 시 최소화</sys:String>
+    <sys:String x:Key="Settings_LanguageSettings">언어 설정(Language)</sys:String>
+    <sys:String x:Key="Settings_DataManagement">데이터 관리</sys:String>
+    <sys:String x:Key="Settings_ImportTitle">VRChatActivityLogViewer 데이터 가져오기</sys:String>
+    <sys:String x:Key="Settings_ImportDescription">데이터베이스에서 월드 방문 기록과 플레이어 조우 데이터를 가져옵니다.&#x0a;「VRChatActivityLog.db」를 선택하세요.</sys:String>
+    <sys:String x:Key="Settings_ImportButton">데이터 가져오기</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCache">썸네일 캐시</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCacheDescription">동영상 썸네일 캐시 폴더를 삭제할 수 있습니다.&#x0a;최근 50건 이후는 자동으로 삭제됩니다.</sys:String>
+    <sys:String x:Key="Settings_ClearCache">캐시 삭제</sys:String>
+    <sys:String x:Key="Settings_OpenFolder">폴더 열기</sys:String>
+    <sys:String x:Key="Settings_PCMigration">PC 이전</sys:String>
+    <sys:String x:Key="Settings_PCMigrationDescription">데이터베이스 저장 폴더를 엽니다.&#x0a;PC 이전 시 「vrchat_activity.db」를 새 PC의 같은 폴더에 복사하세요.</sys:String>
+    <!-- DataGrid Columns -->
+    <sys:String x:Key="Col_DateTime">날짜·시간</sys:String>
+    <sys:String x:Key="Col_WorldName">월드 이름</sys:String>
+    <sys:String x:Key="Col_Duration">체류 시간</sys:String>
+    <sys:String x:Key="Col_PlayerCount">인원수</sys:String>
+    <sys:String x:Key="Col_Players">플레이어</sys:String>
+    <sys:String x:Key="Col_Type">종류</sys:String>
+    <sys:String x:Key="Col_Sender">발신자</sys:String>
+    <!-- Filter Bar -->
+    <sys:String x:Key="Filter_StartDate">시작 날짜</sys:String>
+    <sys:String x:Key="Filter_EndDate">종료 날짜</sys:String>
+    <sys:String x:Key="Filter_PlayerName">플레이어 이름으로 검색</sys:String>
+    <sys:String x:Key="Filter_WorldName">월드 이름으로 검색</sys:String>
+    <sys:String x:Key="Filter_VideoTitle">동영상 제목으로 검색</sys:String>
+    <sys:String x:Key="Filter_Type">종류</sys:String>
+    <sys:String x:Key="Filter_All">전체</sys:String>
+    <sys:String x:Key="Filter_Search">검색</sys:String>
+    <!-- Realtime / Log messages -->
+    <sys:String x:Key="Str_NotConnected">미연결</sys:String>
+    <sys:String x:Key="Log_WorldJoined">월드 입장: </sys:String>
+    <sys:String x:Key="Log_InstanceConnected">인스턴스에 연결</sys:String>
+    <sys:String x:Key="Log_PlayerJoined">{0} 입장</sys:String>
+    <sys:String x:Key="Log_PlayerLeft">{0} 퇴장</sys:String>
+    <sys:String x:Key="Log_Notification">{0}으로부터 {1} 수신</sys:String>
+    <sys:String x:Key="Log_VideoPlayback">동영상 재생: </sys:String>
+    <sys:String x:Key="Log_SelfJoined">{0}에 입장했습니다</sys:String>
+    <sys:String x:Key="Log_SelfLeft">{0}에서 퇴장했습니다</sys:String>
+    <sys:String x:Key="Log_VRChatExited">VRChat이 종료되었습니다</sys:String>
+    <!-- Misc -->
+    <sys:String x:Key="Str_StayingInWorld">체류 중</sys:String>
+    <sys:String x:Key="Confirm_Rejoin">「{0}」에 재참가하시겠습니까?</sys:String>
+    <sys:String x:Key="Info_NoPhotosForVisit">이 방문의 사진을 찾을 수 없습니다.</sys:String>
+    <sys:String x:Key="Info_NoActivityForPhoto">대응하는 활동을 찾을 수 없습니다.</sys:String>
+    <sys:String x:Key="Str_PhotoCount">{0}장의 사진을 표시 중</sys:String>
+    <!-- C# / Dialog strings -->
+    <sys:String x:Key="Str_BrowseLogFolder">VRChat 로그 폴더 선택</sys:String>
+    <sys:String x:Key="Str_BrowsePhotoFolder">사진 폴더 선택</sys:String>
+    <sys:String x:Key="Str_Importing">가져오는 중...</sys:String>
+    <sys:String x:Key="Str_ImportingMessage">가져오는 중, 잠시 기다려 주세요.</sys:String>
+    <sys:String x:Key="Str_ErrorPrefix">오류: </sys:String>
+    <sys:String x:Key="Str_SelectDatabase">VRChatActivityLogViewer 데이터베이스 선택</sys:String>
+    <sys:String x:Key="Str_SqliteFilter">SQLite 데이터베이스 (*.db)|*.db|모든 파일 (*.*)|*.*</sys:String>
+    <sys:String x:Key="Str_ConfirmClearCache">썸네일 캐시를 삭제하시겠습니까?</sys:String>
+    <sys:String x:Key="Str_CacheCleared">캐시를 삭제했습니다.</sys:String>
+    <sys:String x:Key="Str_Done">완료</sys:String>
+    <sys:String x:Key="Str_Confirm">확인</sys:String>
+    <sys:String x:Key="Str_Info">정보</sys:String>
+    <sys:String x:Key="Str_Yes">예</sys:String>
+    <sys:String x:Key="Str_No">아니요</sys:String>
+    <sys:String x:Key="Str_OK">확인</sys:String>
+    <sys:String x:Key="Str_TrayShow">표시</sys:String>
+    <sys:String x:Key="Str_TrayExit">종료</sys:String>
+</ResourceDictionary>

@@ -1,6 +1,7 @@
 using System.Globalization;
 using System.IO;
 using VRCTimeline.Models;
+using VRCTimeline.Services;
 
 namespace VRCTimeline.Services.LogParser;
 
@@ -244,7 +245,7 @@ public class LogWatcher : IDisposable
                 Timestamp = timestamp,
                 Type = LogEntryType.RoomJoin,
                 WorldName = worldName,
-                Message = $"ワールドに入室: {worldName}"
+                Message = LocalizationService.GetString("Log_WorldJoined") + worldName
             };
         }
 
@@ -257,7 +258,7 @@ public class LogWatcher : IDisposable
                 Timestamp = timestamp,
                 Type = LogEntryType.RoomJoin,
                 InstanceId = instanceMatch.Groups[1].Value.Trim(),
-                Message = "インスタンスに接続"
+                Message = LocalizationService.GetString("Log_InstanceConnected")
             };
         }
 
@@ -273,7 +274,7 @@ public class LogWatcher : IDisposable
                 Type = LogEntryType.PlayerJoined,
                 PlayerName = playerName,
                 PlayerUserId = LogPatterns.ExtractUserId(rawName),
-                Message = $"{playerName} が入室しました"
+                Message = string.Format(LocalizationService.GetString("Log_PlayerJoined"), playerName)
             };
         }
 
@@ -289,7 +290,7 @@ public class LogWatcher : IDisposable
                 Type = LogEntryType.PlayerLeft,
                 PlayerName = playerName,
                 PlayerUserId = LogPatterns.ExtractUserId(rawName),
-                Message = $"{playerName} が退室しました"
+                Message = string.Format(LocalizationService.GetString("Log_PlayerLeft"), playerName)
             };
         }
 
@@ -312,7 +313,7 @@ public class LogWatcher : IDisposable
                 Type = LogEntryType.Notification,
                 PlayerName = sender,
                 NotificationType = notifType,
-                Message = $"{sender} から {displayType} を受信"
+                Message = string.Format(LocalizationService.GetString("Log_Notification"), sender, displayType)
             };
         }
 
@@ -326,7 +327,7 @@ public class LogWatcher : IDisposable
                 Timestamp = timestamp,
                 Type = LogEntryType.VideoUrl,
                 VideoUrl = url,
-                Message = $"動画再生: {url}"
+                Message = LocalizationService.GetString("Log_VideoPlayback") + url
             };
         }
 
