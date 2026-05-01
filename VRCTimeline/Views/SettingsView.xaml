@@ -181,7 +181,7 @@
                     </StackPanel>
                 </StackPanel>
             </materialDesign:Card>
-            <TextBlock Text="VRC Timeline   v1.1.0"
+            <TextBlock Text="VRC Timeline   v1.1.1"
                        Style="{StaticResource MaterialDesignCaptionTextBlock}"
                        Opacity="0.4" HorizontalAlignment="Right" />
         </StackPanel>

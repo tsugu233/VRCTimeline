@@ -50,6 +50,13 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>表示中写真の最大撮影日時（言語変更時の再フォーマット用）</summary>
     private DateTime? _photoMaxDate;
 
+    /// <summary>
+    /// プレイヤーカードクリック時に設定されるユーザーID。
+    /// テキスト入力ではなくカードクリックで検索した場合、UserId ベースで遭遇統計を集計する。
+    /// テキスト入力時は null にリセットされる。
+    /// </summary>
+    private string? _searchPlayerUserId;
+
     /// <summary>表示期間の開始日（デフォルト: 30日前）</summary>
     [ObservableProperty]
     private DateTime _filterDateFrom = DateTime.Today.AddDays(-30);
@@ -85,6 +92,18 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>表示中写真の日付範囲テキスト</summary>
     [ObservableProperty]
     private string _dateRangeText = string.Empty;
+
+    /// <summary>プレイヤー検索時の遭遇統計を表示するかどうか</summary>
+    [ObservableProperty]
+    private bool _hasPlayerSummary;
+
+    /// <summary>検索中プレイヤーの遭遇回数</summary>
+    [ObservableProperty]
+    private int _playerEncounterCount;
+
+    /// <summary>検索中プレイヤーとの合計時間（"HH:MM" 形式）</summary>
+    [ObservableProperty]
+    private string _playerTotalTime = "";
 
     /// <summary>ワールド訪問ごとにグループ化された写真の一覧</summary>
     public ObservableCollection<PhotoGroupDisplay> PhotoGroups { get; } = [];
@@ -153,6 +172,7 @@ public partial class PhotoManagerViewModel : ObservableObject
 
     partial void OnPlayerFilterChanged(string? value)
     {
+        _searchPlayerUserId = null;
         if (string.IsNullOrEmpty(value) && _initialized)
             LoadPhotosCommand.Execute(null);
     }
@@ -258,12 +278,13 @@ public partial class PhotoManagerViewModel : ObservableObject
             await using var db = new AppDbContext();
             var players = await db.PlayerSessions
                 .Where(s => s.WorldVisitId == SelectedPhoto.WorldVisitId.Value)
-                .Select(s => new { s.DisplayName, s.JoinedAt, s.LeftAt })
+                .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt })
                 .ToListAsync();
             SelectedPhoto.Players = players
                 .Select(p => new PlayerDisplay
                 {
                     DisplayName = LogPatterns.CleanPlayerName(p.DisplayName),
+                    UserId = p.UserId,
                     JoinedAt = p.JoinedAt,
                     LeftAt = p.LeftAt
                 })
@@ -294,6 +315,7 @@ public partial class PhotoManagerViewModel : ObservableObject
             var dateTo = FilterDateTo;
             var worldFilter = WorldFilter;
             var playerFilter = PlayerFilter;
+            var searchPlayerUserId = _searchPlayerUserId;
             var filterVisitId = _filterWorldVisitId;
             _filterWorldVisitId = null;
 
@@ -401,12 +423,13 @@ public partial class PhotoManagerViewModel : ObservableObject
 
                     var rawPlayers = await db.PlayerSessions
                         .Where(s => s.WorldVisitId == visitId)
-                        .Select(s => new { s.DisplayName, s.JoinedAt, s.LeftAt })
+                        .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt })
                         .ToListAsync();
                     visitPlayers = rawPlayers
                         .Select(p => new PlayerDisplay
                         {
                             DisplayName = LogPatterns.CleanPlayerName(p.DisplayName),
+                            UserId = p.UserId,
                             JoinedAt = p.JoinedAt,
                             LeftAt = p.LeftAt
                         })
@@ -417,7 +440,49 @@ public partial class PhotoManagerViewModel : ObservableObject
                         .ToList();
                 }
 
-                return (photos, groups, filterByVisit, visitWorldName, visitTimeRange, visitPlayers);
+                // ── 遭遇統計の集計（UserId ベース、なければ表示名マッチ） ──
+                (bool Has, int Count, string TotalTime) summary = default;
+                bool hasPlayerSearch = !string.IsNullOrWhiteSpace(playerFilter);
+                if (hasPlayerSearch)
+                {
+                    var visibleVisitIds = photos
+                        .Where(p => p.WorldVisitId.HasValue)
+                        .Select(p => p.WorldVisitId!.Value)
+                        .Distinct()
+                        .ToList();
+
+                    if (visibleVisitIds.Count > 0)
+                    {
+                        List<PlayerSession> matched;
+                        if (!string.IsNullOrEmpty(searchPlayerUserId))
+                        {
+                            matched = await db.PlayerSessions
+                                .Where(s => visibleVisitIds.Contains(s.WorldVisitId)
+                                            && s.UserId == searchPlayerUserId)
+                                .ToListAsync();
+                        }
+                        else
+                        {
+                            var rawSessions = await db.PlayerSessions
+                                .Where(s => visibleVisitIds.Contains(s.WorldVisitId))
+                                .ToListAsync();
+                            matched = rawSessions
+                                .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, playerFilter!))
+                                .ToList();
+                        }
+
+                        var ts = TimeSpan.FromMinutes(
+                            (int)matched.Sum(s =>
+                                s.LeftAt != null ? (s.LeftAt.Value - s.JoinedAt).TotalMinutes : 0));
+                        summary = (
+                            matched.Count > 0,
+                            matched.Count,
+                            $"{(int)ts.TotalHours}:{ts.Minutes:D2}"
+                        );
+                    }
+                }
+
+                return (photos, groups, filterByVisit, visitWorldName, visitTimeRange, visitPlayers, summary, hasPlayerSearch);
             });
 
             // ── UI 更新 ──
@@ -426,6 +491,18 @@ public partial class PhotoManagerViewModel : ObservableObject
             _currentVisitPlayers = [];
             _currentVisitWorldName = "";
             _currentVisitTimeRange = "";
+
+            // 遭遇統計の表示反映
+            if (result.hasPlayerSearch)
+            {
+                HasPlayerSummary = result.summary.Has;
+                PlayerEncounterCount = result.summary.Count;
+                PlayerTotalTime = result.summary.TotalTime;
+            }
+            else
+            {
+                HasPlayerSummary = false;
+            }
 
             if (result.photos.Count == 0)
             {
@@ -556,9 +633,13 @@ public partial class PhotoManagerViewModel : ObservableObject
         Process.Start("explorer.exe", $"/select,\"{SelectedPhoto.FilePath}\"");
     }
 
-    /// <summary>プレイヤーカードクリック時にそのプレイヤーで写真をフィルタリングする</summary>
+    /// <summary>
+    /// プレイヤーカードクリック時にそのプレイヤーで写真をフィルタリングする。
+    /// 表示名で写真を絞り込みつつ、UserId は遭遇統計の集計に利用する。
+    /// OnPlayerFilterChanged で一度クリアされた _searchPlayerUserId を再設定する。
+    /// </summary>
     [RelayCommand]
-    private async Task SearchByPlayer(string playerName)
+    private async Task SearchByPlayer(PlayerDisplay player)
     {
         // フィルター前の状態を保存（フィルター後に復元するため）
         var savedPlayers = SelectedPhotoPlayers.ToList();
@@ -566,7 +647,8 @@ public partial class PhotoManagerViewModel : ObservableObject
         var savedTimeRange = SelectedPhotoTimeRange;
         var savedFilePath = SelectedPhoto?.FilePath;
 
-        PlayerFilter = playerName;
+        PlayerFilter = player.DisplayName;
+        _searchPlayerUserId = !string.IsNullOrEmpty(player.UserId) ? player.UserId : null;
         await LoadPhotosAsync();
 
         // 以前選択していた写真を再選択

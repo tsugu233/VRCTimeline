@@ -75,6 +75,21 @@
                             <TextBlock Text="{Binding SelectedPhotoTimeRange}" VerticalAlignment="Center"
                                        FontSize="12" Opacity="0.7" />
                         </StackPanel>
+                        <StackPanel Orientation="Horizontal" Margin="20,0,0,0"
+                                    Visibility="{Binding HasPlayerSummary, Converter={StaticResource BoolToVis}}">
+                            <materialDesign:PackIcon Kind="AccountSearch" Width="18" Height="18"
+                                                      VerticalAlignment="Center" Margin="0,0,8,0" Opacity="0.7" />
+                            <TextBlock Text="{Binding PlayerFilter}" VerticalAlignment="Center"
+                                       FontWeight="Bold" FontSize="13" Margin="0,0,16,0" />
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12">
+                                <Run Text="{DynamicResource Activity_EncounterCount}" Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                <Run Text="{Binding PlayerEncounterCount, Mode=OneWay}" FontWeight="Bold" />
+                            </TextBlock>
+                            <TextBlock VerticalAlignment="Center" Margin="0,0,16,0" FontSize="12">
+                                <Run Text="{DynamicResource Activity_TotalTime}" Foreground="{DynamicResource MaterialDesignBodyLight}" />
+                                <Run Text="{Binding PlayerTotalTime, Mode=OneWay}" FontWeight="Bold" />
+                            </TextBlock>
+                        </StackPanel>
                     </StackPanel>
 
                     <ScrollViewer Grid.Row="1" x:Name="PlayerScrollViewer" Height="75"
@@ -95,7 +110,7 @@
                                             <MouseBinding MouseAction="LeftClick"
                                                           Command="{Binding DataContext.SearchByPlayerCommand,
                                                               RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                          CommandParameter="{Binding DisplayName}" />
+                                                          CommandParameter="{Binding}" />
                                         </materialDesign:Card.InputBindings>
                                         <StackPanel>
                                             <TextBlock Text="{Binding DisplayName}" FontWeight="Medium"
