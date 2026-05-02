@@ -412,8 +412,16 @@ public class WorldVisitDisplay
 
     /// <summary>滞在時間の表示文字列（未退室の場合はローカライズされた「滞在中」相当文字列）</summary>
     public string Duration => LeftAt.HasValue
-        ? (LeftAt.Value - JoinedAt).ToString(@"hh\:mm\:ss")
+        ? FormatTotalDuration(LeftAt.Value - JoinedAt)
         : LocalizationService.GetString("Str_StayingInWorld");
+
+    /// <summary>
+    /// 滞在時間を「総時間:分:秒」形式に整形する。
+    /// 標準の "hh\:mm\:ss" は 24 時間で巻き戻るため、
+    /// 25 時間以上の長時間滞在も正しく表示できるよう TotalHours を使用する。
+    /// </summary>
+    private static string FormatTotalDuration(TimeSpan d)
+        => $"{(int)d.TotalHours:D2}:{d.Minutes:D2}:{d.Seconds:D2}";
 
     /// <summary>入室〜退室の時間範囲表示</summary>
     public string TimeRange => DateFormatHelper.FormatTimeRange(JoinedAt, LeftAt);
