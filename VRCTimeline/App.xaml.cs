@@ -81,6 +81,10 @@ public partial class App : Application
             var settingsService = _serviceProvider.GetRequiredService<SettingsService>();
             await settingsService.LoadAsync();
 
+            // スタートアップレジストリを現在の exe パスに同期する。
+            // バージョンアップ等で exe の場所が変わってもここで自動追従する。
+            StartupRegistryService.Sync(settingsService.Settings.LaunchOnStartup);
+
             // DB の初期化（テーブル作成・マイグレーション）
             await using (var db = new AppDbContext())
             {

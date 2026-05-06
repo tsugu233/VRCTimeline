@@ -194,7 +194,7 @@ public partial class SettingsViewModel : ObservableObject
             s.ButtonTextColorHex = ButtonTextColorHex;
             s.Language = SelectedLanguage?.Code ?? string.Empty;
             await _settingsService.SaveAsync();
-            UpdateStartupRegistry();
+            StartupRegistryService.Sync(LaunchOnStartup);
         }
         catch { }
     }
@@ -357,25 +357,4 @@ public partial class SettingsViewModel : ObservableObject
         Process.Start(new ProcessStartInfo(VideoInfoService.CacheDir) { UseShellExecute = true });
     }
 
-    /// <summary>Windows のスタートアップレジストリにアプリを登録/解除する</summary>
-    private void UpdateStartupRegistry()
-    {
-        try
-        {
-            using var key = Microsoft.Win32.Registry.CurrentUser.OpenSubKey(
-                @"SOFTWARE\Microsoft\Windows\CurrentVersion\Run", true);
-
-            if (LaunchOnStartup)
-            {
-                var exePath = Environment.ProcessPath;
-                if (exePath != null)
-                    key?.SetValue("VRCTimeline", $"\"{exePath}\" --startup");
-            }
-            else
-            {
-                key?.DeleteValue("VRCTimeline", false);
-            }
-        }
-        catch { }
-    }
 }
