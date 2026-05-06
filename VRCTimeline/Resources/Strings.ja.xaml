@@ -104,4 +104,6 @@
     <sys:String x:Key="Str_OK">OK</sys:String>
     <sys:String x:Key="Str_TrayShow">表示</sys:String>
     <sys:String x:Key="Str_TrayExit">終了</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedTitle">設定ファイルの読み込みエラー</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedMessage">設定ファイルが破損していたため、初期値で起動しました。\n破損したファイルは下記にバックアップされています:\n{0}</sys:String>
 </ResourceDictionary>

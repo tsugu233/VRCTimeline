@@ -104,4 +104,6 @@
     <sys:String x:Key="Str_OK">OK</sys:String>
     <sys:String x:Key="Str_TrayShow">Show</sys:String>
     <sys:String x:Key="Str_TrayExit">Exit</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedTitle">Failed to load settings</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedMessage">The settings file was corrupted and the application started with default values.\nA backup of the corrupted file has been saved here:\n{0}</sys:String>
 </ResourceDictionary>

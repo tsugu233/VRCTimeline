@@ -34,6 +34,12 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>初期ロード中の自動保存を抑制するフラグ</summary>
     private bool _suppressSave;
 
+    /// <summary>カラーピッカードラッグ等の高頻度変更をまとめるためのデバウンス用 CTS</summary>
+    private CancellationTokenSource? _saveCts;
+
+    /// <summary>自動保存のデバウンス時間（ミリ秒）</summary>
+    private const int SaveDebounceMs = 250;
+
     /// <summary>VRChat ログフォルダのパス</summary>
     [ObservableProperty]
     private string _logDirectory = string.Empty;
@@ -104,11 +110,8 @@ public partial class SettingsViewModel : ObservableObject
         {
             if (!SetProperty(ref _selectedLanguage, value) || value == null) return;
             if (!_suppressSave)
-            {
-                _settingsService.Settings.Language = value.Code;
                 LocalizationService.SetLanguage(value.Code);
-                _ = _settingsService.SaveAsync();
-            }
+            // 永続化は OnPropertyChanged 経由のデバウンス保存に任せる（SaveableProperties に含まれる）
         }
     }
 
@@ -117,7 +120,7 @@ public partial class SettingsViewModel : ObservableObject
     [
         nameof(LogDirectory), nameof(PhotoDirectory), nameof(LaunchOnStartup),
         nameof(MinimizeOnStartup), nameof(AutoDetectVRChat), nameof(IsDarkMode),
-        nameof(AccentColorHex), nameof(ButtonTextColorHex)
+        nameof(AccentColorHex), nameof(ButtonTextColorHex), nameof(SelectedLanguage)
     ];
 
     public SettingsViewModel(SettingsService settingsService, LoadingService loadingService, DialogService dialogService, NavigationService navigationService, PhotoWatcher photoWatcher)
@@ -170,12 +173,31 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
-    /// <summary>保存対象プロパティの変更を検知して自動保存する</summary>
+    /// <summary>
+    /// 保存対象プロパティの変更を検知して自動保存する。
+    /// カラーピッカードラッグ等で連続発火するため、最後の変更から SaveDebounceMs だけ待ってから書き込む。
+    /// </summary>
     protected override void OnPropertyChanged(PropertyChangedEventArgs e)
     {
         base.OnPropertyChanged(e);
-        if (!_suppressSave && e.PropertyName != null && SaveableProperties.Contains(e.PropertyName))
-            _ = SaveSettingsInternalAsync();
+        if (_suppressSave || e.PropertyName == null) return;
+        if (!SaveableProperties.Contains(e.PropertyName)) return;
+
+        _saveCts?.Cancel();
+        _saveCts = new CancellationTokenSource();
+        var token = _saveCts.Token;
+        _ = DebouncedSaveAsync(token);
+    }
+
+    /// <summary>デバウンス遅延後に保存を実行する。デバウンス中の追加変更でキャンセルされる。</summary>
+    private async Task DebouncedSaveAsync(CancellationToken token)
+    {
+        try
+        {
+            await Task.Delay(SaveDebounceMs, token);
+            await SaveSettingsInternalAsync();
+        }
+        catch (OperationCanceledException) { /* 後続の変更にデバウンスを譲る */ }
     }
 
     /// <summary>現在のプロパティ値を設定ファイルに保存し、スタートアップ登録を更新する</summary>

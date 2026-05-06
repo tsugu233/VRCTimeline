@@ -104,4 +104,6 @@
     <sys:String x:Key="Str_OK">확인</sys:String>
     <sys:String x:Key="Str_TrayShow">표시</sys:String>
     <sys:String x:Key="Str_TrayExit">종료</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedTitle">설정 파일 읽기 오류</sys:String>
+    <sys:String x:Key="Str_SettingsCorruptedMessage">설정 파일이 손상되어 기본값으로 시작했습니다.\n손상된 파일은 다음 위치에 백업되어 있습니다:\n{0}</sys:String>
 </ResourceDictionary>

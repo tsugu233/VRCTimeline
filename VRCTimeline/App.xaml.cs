@@ -134,6 +134,27 @@ public partial class App : Application
             bool silentStart = e.Args.Contains("--startup");
             if (!silentStart)
                 mainWindow.Show();
+
+            // 設定ファイル破損を検知していた場合、ウィンドウが前面化された後に一度だけ通知する。
+            if (settingsService.LoadCorruptionDetected)
+            {
+                var backupPath = settingsService.CorruptionBackupPath ?? string.Empty;
+                if (silentStart)
+                {
+                    // サイレント起動時は MainWindow が初めて Show されるタイミングまで通知を遅延
+                    void OnFirstShow(object s, System.Windows.DependencyPropertyChangedEventArgs args)
+                    {
+                        if (args.NewValue is not true) return;
+                        mainWindow.IsVisibleChanged -= OnFirstShow;
+                        ShowSettingsCorruptedDialog(mainWindow, backupPath);
+                    }
+                    mainWindow.IsVisibleChanged += OnFirstShow;
+                }
+                else
+                {
+                    ShowSettingsCorruptedDialog(mainWindow, backupPath);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -141,6 +162,19 @@ public partial class App : Application
                 "Error", MessageBoxButton.OK, MessageBoxImage.Error);
             Shutdown();
         }
+    }
+
+    /// <summary>設定ファイル破損の通知ダイアログを一度だけ表示する</summary>
+    private static void ShowSettingsCorruptedDialog(Window owner, string backupPath)
+    {
+        var title = LocalizationService.GetString("Str_SettingsCorruptedTitle");
+        var template = LocalizationService.GetString("Str_SettingsCorruptedMessage");
+        // リソース文字列内のリテラル "\n" を OS 改行に置換してから {0} を埋める
+        var message = string.Format(template.Replace("\\n", Environment.NewLine), backupPath);
+        if (owner.IsVisible)
+            MessageBox.Show(owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
     }
 
     /// <summary>システムトレイアイコンとコンテキストメニューを設定する</summary>
