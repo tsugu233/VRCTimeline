@@ -485,6 +485,24 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Window 非表示時に表示用リソースを破棄する。
+    /// ViewModel の Singleton インスタンスは破棄されないため、再表示時には Loaded イベント経由で
+    /// 再ロードされるよう初期化フラグをリセットする。
+    /// DB アクセス・タイマー・静的イベント購読には触れず、UI 表示用コレクションのクリアのみ行う。
+    /// </summary>
+    public void ReleaseUiResources()
+    {
+        WorldVisits.Clear();
+        SelectedVisitPlayers.Clear();
+        SelectedVisit = null;
+        HasPlayerSummary = false;
+        PlayerEncounterCount = 0;
+        PlayerTotalTime = "";
+        _filterVisitId = null;
+        _initialized = false;
+    }
+
+    /// <summary>
     /// 静的イベントの購読解除と DayChangeWatcher のタイマー停止を行う。
     /// 現状は Singleton 登録なのでアプリ終了時に DI コンテナから呼ばれる。
     /// </summary>

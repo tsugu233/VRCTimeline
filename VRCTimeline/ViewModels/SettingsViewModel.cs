@@ -401,4 +401,15 @@ public partial class SettingsViewModel : ObservableObject
         Process.Start(new ProcessStartInfo(VideoInfoService.CacheDir) { UseShellExecute = true });
     }
 
+    /// <summary>
+    /// Window 非表示時に表示用リソースを破棄する。
+    /// ViewModel の Singleton インスタンスは破棄されないため、再表示時には Loaded イベント経由で
+    /// 再ロードされる。設定値の状態は SettingsService 側で保持されており、本 ViewModel 内には
+    /// 表示用キャッシュコレクションを持たないため、呼び出し側の統一目的で no-op を提供する。
+    /// </summary>
+    public void ReleaseUiResources()
+    {
+        // no-op: 表示用キャッシュは保持していない。状態は SettingsService 側にある。
+    }
+
 }

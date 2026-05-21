@@ -1,6 +1,9 @@
 using System.Data.Common;
+using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
+using System.Runtime;
+using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Markup;
@@ -10,6 +13,7 @@ using MaterialDesignThemes.Wpf;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
+using VRCTimeline.Converters;
 using VRCTimeline.Data;
 using VRCTimeline.Services;
 using VRCTimeline.Services.LogParser;
@@ -129,11 +133,14 @@ public partial class App : Application
 
             SetupNotifyIcon(mainWindow);
 
-            // 閉じるボタンでウィンドウを非表示にする（トレイに最小化）
+            // 閉じるボタンでウィンドウを非表示にする（トレイに最小化）。
+            // Hide 直後に UI 表示用リソースを解放してメモリを即座に縮小する。
+            // バックグラウンドサービス（VRChatProcessMonitor / PhotoWatcher / LogWatcher）は継続。
             mainWindow.Closing += (s, args) =>
             {
                 args.Cancel = true;
                 mainWindow.Hide();
+                OnMainWindowHidden(mainWindow);
             };
 
             bool silentStart = e.Args.Contains("--startup");
@@ -272,7 +279,49 @@ public partial class App : Application
         window.Show();
         window.WindowState = WindowState.Normal;
         window.Activate();
+        if (window.DataContext is MainViewModel vm)
+            vm.OnShown();
     }
+
+    /// <summary>
+    /// Window 非表示時に UI 表示用リソースを解放する。
+    /// 順序:
+    ///   1. MainViewModel.OnHidden() で（リアルタイム画面以外の）VM の表示用コレクションをクリア＋ナビ位置をリセット
+    ///   2. MainWindow._viewCache を「リアルタイム画面を残して」クリア。
+    ///      これにより再表示時にナビ切替や PropertyChanged を経由しなくても画面が見える状態を維持する
+    ///   3. サムネイル LRU キャッシュをクリアして BitmapImage 群を解放
+    ///   4. LOH コンパクションを 1 回だけ要求してから GC を 2 回実行。Bitmap 等の大型オブジェクトは
+    ///      通常 LOH に置かれて GC されにくいため、明示的なコンパクションを挟む
+    ///   5. <see cref="SetProcessWorkingSetSize"/> でワーキングセットを Windows にトリム要求。
+    ///      .NET の GC は managed heap を縮小しても OS の working set は自動では縮小しないため、
+    ///      タスクマネージャ表示で「Hide 直後にメモリが下がる」体験を出すには必須
+    /// </summary>
+    private static void OnMainWindowHidden(Window mainWindow)
+    {
+        if (mainWindow.DataContext is not MainViewModel vm) return;
+
+        vm.OnHidden();
+
+        if (mainWindow is MainWindow mw)
+            mw.ClearViewCache(vm.RealtimeMonitorVm);
+
+        PathToThumbnailConverter.ClearCache();
+
+        GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
+        GC.Collect();
+        GC.WaitForPendingFinalizers();
+        GC.Collect();
+
+        try
+        {
+            // -1 / -1 は「可能な限りワーキングセットを縮小」の指示。失敗しても致命ではないので握りつぶす。
+            SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, (IntPtr)(-1), (IntPtr)(-1));
+        }
+        catch { /* best-effort */ }
+    }
+
+    [DllImport("kernel32.dll", SetLastError = true)]
+    private static extern bool SetProcessWorkingSetSize(IntPtr handle, IntPtr min, IntPtr max);
 
     /// <summary>二重起動時に既存インスタンスのウィンドウ表示を要求する名前付きパイプサーバーを開始する</summary>
     private void StartPipeServer()

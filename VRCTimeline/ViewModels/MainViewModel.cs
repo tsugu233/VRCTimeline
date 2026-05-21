@@ -156,6 +156,40 @@ public partial class MainViewModel : ObservableObject
         });
     }
 
+    /// <summary>
+    /// Window 非表示（トレイ最小化）時に呼び出される。
+    /// 各画面の ViewModel が UI 表示用に保持している大型コレクションを破棄し、
+    /// 次回表示時はリアルタイム画面で開くようナビゲーション位置をリセットする。
+    /// **リアルタイム監視画面（VM・View・LogEntries）は保持する**:
+    /// 再表示時に即描画＆ログが空にならないようにするため。
+    /// LogWatcher・PhotoWatcher・VRChatProcessMonitor 等のバックグラウンドサービスは継続する。
+    /// </summary>
+    public void OnHidden()
+    {
+        // リアルタイム VM は触らない（View もキャッシュに残し、LogEntries / CurrentPlayers / CurrentWorldName をそのまま保つ）
+        ActivityHistoryVm.ReleaseUiResources();
+        PhotoManagerVm.ReleaseUiResources();
+        NotificationLogVm.ReleaseUiResources();
+        VideoLogVm.ReleaseUiResources();
+        SettingsVm.ReleaseUiResources();
+
+        // 次回表示時にリアルタイム監視画面で開くようリセット。
+        // OnSelectedNavIndexChanged 経由で CurrentViewModel = RealtimeMonitorVm にも反映される。
+        SelectedNavIndex = 0;
+        CurrentViewModel = RealtimeMonitorVm;
+    }
+
+    /// <summary>
+    /// Window 表示時に呼び出される。
+    /// 現状は特に追加処理なし: 各 View の Loaded イベントで InitializeAsync が再走するため、
+    /// OnHidden で初期化フラグをクリアした VM は自動的に再ロードされる。
+    /// </summary>
+    public void OnShown()
+    {
+        // 明示的にリアルタイム画面に切り替え（保険）
+        if (SelectedNavIndex != 0) SelectedNavIndex = 0;
+    }
+
     /// <summary>StartMonitoring を fire-and-forget で安全に呼び出すためのラッパー</summary>
     private async Task StartMonitoringSafeAsync()
     {
