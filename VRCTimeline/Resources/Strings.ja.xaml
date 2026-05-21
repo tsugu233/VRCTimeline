@@ -27,6 +27,9 @@
     <sys:String x:Key="Photo_OpenFolder">フォルダを開く</sys:String>
     <sys:String x:Key="Photo_JoinedPlayers">参加プレイヤー</sys:String>
     <sys:String x:Key="Photo_NoPhotos">写真が見つかりません</sys:String>
+    <sys:String x:Key="Photo_Viewer_Previous">前へ</sys:String>
+    <sys:String x:Key="Photo_Viewer_Next">次へ</sys:String>
+    <sys:String x:Key="Photo_Viewer_Close">閉じる</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">ディレクトリ設定</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChatログフォルダ</sys:String>
@@ -47,11 +50,11 @@
     <sys:String x:Key="Settings_ImportDescription">データベースからワールド訪問履歴とプレイヤー遭遇データをインポートします。&#x0a;「VRChatActivityLog.db」を指定してください。</sys:String>
     <sys:String x:Key="Settings_ImportButton">データを引き継ぐ</sys:String>
     <sys:String x:Key="Settings_ThumbnailCache">サムネイルキャッシュ</sys:String>
-    <sys:String x:Key="Settings_ThumbnailCacheDescription">動画サムネイルのキャッシュフォルダを削除できます。&#x0a;直近50件以降は自動的に削除されています。</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCacheDescription" xml:space="preserve">動画サムネイルのキャッシュフォルダを削除できます。&#x0a;直近50件以降は自動的に削除されています。</sys:String>
     <sys:String x:Key="Settings_ClearCache">キャッシュを削除</sys:String>
     <sys:String x:Key="Settings_OpenFolder">フォルダを表示</sys:String>
     <sys:String x:Key="Settings_PCMigration">PC移行</sys:String>
-    <sys:String x:Key="Settings_PCMigrationDescription">データベースの保存先フォルダを開きます。&#x0a;PC移行時は「vrchat_activity.db」を新しいPCの同じフォルダにコピーしてください。</sys:String>
+    <sys:String x:Key="Settings_PCMigrationDescription" xml:space="preserve">データベースの保存先フォルダを開きます。&#x0a;PC移行時は「vrchat_activity.db」を新しいPCの同じフォルダにコピーしてください。</sys:String>
     <!-- DataGrid Columns -->
     <sys:String x:Key="Col_DateTime">日時</sys:String>
     <sys:String x:Key="Col_WorldName">ワールド名</sys:String>
@@ -84,6 +87,7 @@
     <sys:String x:Key="Str_StayingInWorld">滞在中</sys:String>
     <sys:String x:Key="Confirm_Rejoin">「{0}」に入り直しますか？</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">この訪問の写真は見つかりませんでした。</sys:String>
+    <sys:String x:Key="OpenError_ExternalAppFailed">フォトビューアーの起動に失敗しました&#x0a;既定のアプリ設定を確認してください。</sys:String>
     <sys:String x:Key="Info_NoActivityForPhoto">対応するアクティビティが見つかりませんでした。</sys:String>
     <sys:String x:Key="Str_PhotoCount">{0} 枚の写真を表示中</sys:String>
     <!-- C# / Dialog strings -->
@@ -106,4 +110,8 @@
     <sys:String x:Key="Str_TrayExit">終了</sys:String>
     <sys:String x:Key="Str_SettingsCorruptedTitle">設定ファイルの読み込みエラー</sys:String>
     <sys:String x:Key="Str_SettingsCorruptedMessage">設定ファイルが破損していたため、初期値で起動しました。\n破損したファイルは下記にバックアップされています:\n{0}</sys:String>
+    <sys:String x:Key="Str_SettingsLockedTitle">設定ファイルの読み込みエラー</sys:String>
+    <sys:String x:Key="Str_SettingsLockedMessage">設定ファイルにアクセスできなかったため、このセッションでは設定の自動保存を無効にしています。\n（既存の設定ファイルを保護するため）\n\nアプリを再起動すると通常通り動作します。問題が続く場合はファイルがロックされていないか確認してください。</sys:String>
+    <sys:String x:Key="Str_DbErrorTitle">データベース書き込みエラー</sys:String>
+    <sys:String x:Key="Str_DbErrorMessage">データベースへの書き込みでエラーが発生しました。新しい記録が保存されていない可能性があります。</sys:String>
 </ResourceDictionary>

@@ -23,25 +23,14 @@
             <converters:EqualityMultiConverter x:Key="EqualityMulti" />
             <converters:NullToVisibilityConverter x:Key="NullToVis" />
 
-            <!-- ViewModel to View DataTemplates -->
-            <DataTemplate DataType="{x:Type vm:RealtimeMonitorViewModel}">
-                <views:RealtimeMonitorView />
-            </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:ActivityHistoryViewModel}">
-                <views:ActivityHistoryView />
-            </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:PhotoManagerViewModel}">
-                <views:PhotoManagerView />
-            </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:NotificationLogViewModel}">
-                <views:NotificationLogView />
-            </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:VideoLogViewModel}">
-                <views:VideoLogView />
-            </DataTemplate>
-            <DataTemplate DataType="{x:Type vm:SettingsViewModel}">
-                <views:SettingsView />
-            </DataTemplate>
+            <!--
+                ViewModel-to-View の DataTemplate は廃止。
+                以前は ContentControl + DataTemplate でサブ画面を表示していたが、
+                ContentControl は ViewModel が変わるたびに DataTemplate から新規 View を生成するため、
+                サイドメニュー切替時に毎回 ItemsControl とサムネイル BitmapImage が再構築されて重かった。
+                現在は MainWindow.xaml.cs 側で View インスタンスをキャッシュし、ContentRoot.Content に
+                直接差し込む方式に変更している。MVVM 純度を保つため code-behind 側で完結している。
+            -->
         </ResourceDictionary>
     </Application.Resources>
 </Application>

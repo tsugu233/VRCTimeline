@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "PowerShell(dotnet build *)",
+      "PowerShell(dotnet msbuild *)",
+      "Bash(dotnet msbuild *)",
+      "Read(//tmp/**)",
+      "Bash(dotnet build *)",
+      "Bash(grep -E \"\\(error CS|warning CS|エラー$|0 エラー\\)\")",
+      "Bash(findstr /n \"void IDisposable.Dispose\\\\|public void Dispose\" *.cs)"
+    ]
+  }
+}

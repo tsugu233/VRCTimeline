@@ -1,11 +1,14 @@
+using System.Data.Common;
 using System.IO;
 using System.IO.Pipes;
+using System.Text;
 using System.Windows;
 using System.Windows.Markup;
 using System.Windows.Media;
 using MaterialDesignColors;
 using MaterialDesignThemes.Wpf;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
 using VRCTimeline.Data;
 using VRCTimeline.Services;
@@ -89,10 +92,12 @@ public partial class App : Application
             await using (var db = new AppDbContext())
             {
                 await db.Database.EnsureCreatedAsync();
-                await EnsureMissingTablesAsync(db);
+                await EnsureSchemaUpToDateAsync(db);
             }
 
             // 言語の初期化（未設定の場合はシステムカルチャから自動検出して保存）
+            // LoadIOFailureDetected 時は SaveAsync が no-op になるが、永続化されないだけで
+            // このセッションの言語表示は問題なく機能する。
             var langSettings = settingsService.Settings;
             if (string.IsNullOrEmpty(langSettings.Language))
             {
@@ -155,6 +160,26 @@ public partial class App : Application
                     ShowSettingsCorruptedDialog(mainWindow, backupPath);
                 }
             }
+
+            // 設定ファイルの IO 失敗（ロック・権限拒否等）を検知していた場合も同様に通知する。
+            // この間 SaveAsync は no-op になっており、ユーザの既存設定ファイルは保護されている。
+            if (settingsService.LoadIOFailureDetected)
+            {
+                if (silentStart)
+                {
+                    void OnFirstShow(object s, System.Windows.DependencyPropertyChangedEventArgs args)
+                    {
+                        if (args.NewValue is not true) return;
+                        mainWindow.IsVisibleChanged -= OnFirstShow;
+                        ShowSettingsLockedDialog(mainWindow);
+                    }
+                    mainWindow.IsVisibleChanged += OnFirstShow;
+                }
+                else
+                {
+                    ShowSettingsLockedDialog(mainWindow);
+                }
+            }
         }
         catch (Exception ex)
         {
@@ -171,6 +196,21 @@ public partial class App : Application
         var template = LocalizationService.GetString("Str_SettingsCorruptedMessage");
         // リソース文字列内のリテラル "\n" を OS 改行に置換してから {0} を埋める
         var message = string.Format(template.Replace("\\n", Environment.NewLine), backupPath);
+        if (owner.IsVisible)
+            MessageBox.Show(owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+        else
+            MessageBox.Show(message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
+    }
+
+    /// <summary>
+    /// 設定ファイル IO 失敗（ロック等）の通知ダイアログを表示する。
+    /// このセッション中は SaveAsync が no-op になり、既存設定ファイルが上書きされない旨を伝える。
+    /// </summary>
+    private static void ShowSettingsLockedDialog(Window owner)
+    {
+        var title = LocalizationService.GetString("Str_SettingsLockedTitle");
+        var template = LocalizationService.GetString("Str_SettingsLockedMessage");
+        var message = template.Replace("\\n", Environment.NewLine);
         if (owner.IsVisible)
             MessageBox.Show(owner, message, title, MessageBoxButton.OK, MessageBoxImage.Warning);
         else
@@ -254,7 +294,7 @@ public partial class App : Application
                     });
                 }
                 catch (OperationCanceledException) { break; }
-                catch { }
+                catch { /* パイプ通信の一時的エラー（相手の中断等）はリトライで吸収 */ }
             }
         }, token);
     }
@@ -267,7 +307,7 @@ public partial class App : Application
             using var client = new NamedPipeClientStream(".", PipeName, PipeDirection.Out);
             client.Connect(3000);
         }
-        catch { }
+        catch { /* 接続失敗時は通知諦め（既存インスタンスが落ちている等の想定内ケース） */ }
     }
 
     /// <summary>アプリケーション終了時のクリーンアップ処理</summary>
@@ -364,47 +404,217 @@ public partial class App : Application
     }
 
     /// <summary>
-    /// DB に不足しているテーブルを追加作成する。
-    /// EnsureCreated だけでは既存 DB への新テーブル追加が行われないため、
-    /// 生成スクリプトから欠落テーブルを検出して個別に作成する。
+    /// 既存 DB のスキーマを現行モデルに追従させる。EnsureCreated は既存 DB に対しては
+    /// 何もしないため、以下を追加適用する:
+    ///   1. 不足テーブルの CREATE TABLE（GenerateCreateScript から抽出）
+    ///   2. 既存テーブルへの不足列の ALTER TABLE ADD COLUMN
+    ///   3. 既存テーブルへの不足インデックスの CREATE INDEX IF NOT EXISTS
+    /// 全工程を単一トランザクションで囲うため、途中失敗時はロールバックされ
+    /// 既存データに対して非破壊（CREATE / ALTER ADD / CREATE INDEX のみで DROP / UPDATE は実行しない）。
     /// </summary>
-    private static async Task EnsureMissingTablesAsync(AppDbContext db)
+    private static async Task EnsureSchemaUpToDateAsync(AppDbContext db)
     {
         var conn = db.Database.GetDbConnection();
         await conn.OpenAsync();
         try
         {
-            using var cmd = conn.CreateCommand();
-            cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
-            var existing = new HashSet<string>();
-            using (var reader = await cmd.ExecuteReaderAsync())
+            await using var tx = await conn.BeginTransactionAsync();
+            try
             {
-                while (await reader.ReadAsync())
-                    existing.Add(reader.GetString(0));
+                var existingTables = await GetExistingTablesAsync(conn, tx);
+                await CreateMissingTablesAsync(db, conn, tx, existingTables);
+
+                foreach (var entityType in db.Model.GetEntityTypes())
+                {
+                    var tableName = entityType.GetTableName();
+                    if (string.IsNullOrEmpty(tableName)) continue;
+                    if (!existingTables.Contains(tableName)) continue;
+
+                    var storeObject = StoreObjectIdentifier.Table(tableName, entityType.GetSchema());
+                    await EnsureMissingColumnsAsync(conn, tx, entityType, tableName, storeObject);
+                    await EnsureMissingIndicesAsync(conn, tx, entityType, tableName, storeObject);
+                }
+
+                await tx.CommitAsync();
             }
-
-            var script = db.Database.GenerateCreateScript();
-            foreach (var statement in script.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            catch
             {
-                var trimmed = statement.Trim();
-                if (!trimmed.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase))
-                    continue;
-
-                var nameStart = trimmed.IndexOf('"');
-                var nameEnd = trimmed.IndexOf('"', nameStart + 1);
-                if (nameStart < 0 || nameEnd < 0) continue;
-
-                var tableName = trimmed[(nameStart + 1)..nameEnd];
-                if (existing.Contains(tableName)) continue;
-
-                using var create = conn.CreateCommand();
-                create.CommandText = trimmed;
-                await create.ExecuteNonQueryAsync();
+                try { await tx.RollbackAsync(); } catch { /* rollback 失敗は元の例外を優先 */ }
+                throw;
             }
         }
         finally
         {
             await conn.CloseAsync();
         }
+    }
+
+    private static async Task<HashSet<string>> GetExistingTablesAsync(DbConnection conn, DbTransaction tx)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = "SELECT name FROM sqlite_master WHERE type='table'";
+        var existing = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = await cmd.ExecuteReaderAsync();
+        while (await reader.ReadAsync())
+            existing.Add(reader.GetString(0));
+        return existing;
+    }
+
+    private static async Task CreateMissingTablesAsync(AppDbContext db, DbConnection conn, DbTransaction tx, HashSet<string> existingTables)
+    {
+        var script = db.Database.GenerateCreateScript();
+        foreach (var statement in script.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var trimmed = statement.Trim();
+            if (!trimmed.StartsWith("CREATE TABLE", StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            var nameStart = trimmed.IndexOf('"');
+            if (nameStart < 0) continue;
+            var nameEnd = trimmed.IndexOf('"', nameStart + 1);
+            if (nameEnd < 0) continue;
+
+            var tableName = trimmed[(nameStart + 1)..nameEnd];
+            if (existingTables.Contains(tableName)) continue;
+
+            using var create = conn.CreateCommand();
+            create.Transaction = tx;
+            create.CommandText = trimmed;
+            await create.ExecuteNonQueryAsync();
+            existingTables.Add(tableName);
+        }
+    }
+
+    private static async Task EnsureMissingColumnsAsync(
+        DbConnection conn, DbTransaction tx, IEntityType entityType, string tableName, StoreObjectIdentifier storeObject)
+    {
+        var existingCols = await GetExistingColumnsAsync(conn, tx, tableName);
+
+        foreach (var property in entityType.GetProperties())
+        {
+            // PK は ALTER で追加不能。新規テーブルでは既に CREATE TABLE 側で作成済み。
+            if (property.IsPrimaryKey()) continue;
+
+            var columnName = property.GetColumnName(storeObject);
+            if (string.IsNullOrEmpty(columnName)) continue;
+            if (existingCols.Contains(columnName)) continue;
+
+            var columnType = property.GetColumnType(storeObject);
+            if (string.IsNullOrEmpty(columnType)) continue;
+
+            var isNullable = property.IsColumnNullable(storeObject);
+            var def = BuildAddColumnDefinition(columnName, columnType, isNullable, property);
+            // SQLite の ALTER TABLE ADD COLUMN で安全に追加できないケース
+            // （NOT NULL かつ既定値推定不可・PK・UNIQUE 等）は次回起動でも検出されるので
+            // ここでは黙ってスキップする。既存データは一切変更しない。
+            if (def == null) continue;
+
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = $"ALTER TABLE \"{tableName}\" ADD COLUMN {def}";
+            await cmd.ExecuteNonQueryAsync();
+            existingCols.Add(columnName);
+        }
+    }
+
+    private static async Task<HashSet<string>> GetExistingColumnsAsync(DbConnection conn, DbTransaction tx, string tableName)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"PRAGMA table_info(\"{tableName}\")";
+        var cols = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = await cmd.ExecuteReaderAsync();
+        var nameOrdinal = reader.GetOrdinal("name");
+        while (await reader.ReadAsync())
+            cols.Add(reader.GetString(nameOrdinal));
+        return cols;
+    }
+
+    /// <summary>
+    /// ADD COLUMN 用の列定義文字列を構築する。
+    /// FOREIGN KEY / UNIQUE / PRIMARY KEY 等の制約は付けない（SQLite の ALTER TABLE 制限により
+    /// 既存行があると追加不能になるため）。FK 関係は EF Core のモデル側で表現されるので
+    /// 列だけ追加できれば実用上問題ない。
+    /// </summary>
+    private static string? BuildAddColumnDefinition(string columnName, string columnType, bool isNullable, IProperty property)
+    {
+        var sb = new StringBuilder();
+        sb.Append('"').Append(columnName).Append('"').Append(' ').Append(columnType);
+        if (!isNullable)
+        {
+            var defaultLiteral = GetSafeDefaultLiteral(columnType, property);
+            if (defaultLiteral == null) return null;
+            sb.Append(" NOT NULL DEFAULT ").Append(defaultLiteral);
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>NOT NULL 列を ALTER で追加する際の安全なデフォルトリテラルを返す。推定不可なら null。</summary>
+    private static string? GetSafeDefaultLiteral(string columnType, IProperty property)
+    {
+        var efDefault = property.GetDefaultValue();
+        if (efDefault != null)
+        {
+            return efDefault switch
+            {
+                string s => $"'{s.Replace("'", "''")}'",
+                bool b => b ? "1" : "0",
+                DateTime dt => $"'{dt:yyyy-MM-dd HH:mm:ss.fffffff}'",
+                _ => efDefault.ToString()
+            };
+        }
+
+        var upper = columnType.ToUpperInvariant();
+        if (upper.Contains("TEXT") || upper.Contains("CHAR") || upper.Contains("CLOB"))
+            return "''";
+        if (upper.Contains("INT") || upper.Contains("REAL") || upper.Contains("NUMERIC") ||
+            upper.Contains("FLOAT") || upper.Contains("DOUB") || upper.Contains("DECIMAL"))
+            return "0";
+        if (upper.Contains("BLOB"))
+            return "x''";
+        return null;
+    }
+
+    private static async Task EnsureMissingIndicesAsync(
+        DbConnection conn, DbTransaction tx, IEntityType entityType, string tableName, StoreObjectIdentifier storeObject)
+    {
+        var existing = await GetExistingIndicesAsync(conn, tx, tableName);
+
+        foreach (var index in entityType.GetIndexes())
+        {
+            var indexName = index.GetDatabaseName(storeObject);
+            if (string.IsNullOrEmpty(indexName)) continue;
+            if (existing.Contains(indexName)) continue;
+
+            var columnList = new List<string>(index.Properties.Count);
+            var canBuild = true;
+            foreach (var p in index.Properties)
+            {
+                var col = p.GetColumnName(storeObject);
+                if (string.IsNullOrEmpty(col)) { canBuild = false; break; }
+                columnList.Add($"\"{col}\"");
+            }
+            if (!canBuild) continue;
+
+            var unique = index.IsUnique ? "UNIQUE " : string.Empty;
+            using var cmd = conn.CreateCommand();
+            cmd.Transaction = tx;
+            cmd.CommandText = $"CREATE {unique}INDEX IF NOT EXISTS \"{indexName}\" ON \"{tableName}\" ({string.Join(", ", columnList)})";
+            await cmd.ExecuteNonQueryAsync();
+        }
+    }
+
+    private static async Task<HashSet<string>> GetExistingIndicesAsync(DbConnection conn, DbTransaction tx, string tableName)
+    {
+        using var cmd = conn.CreateCommand();
+        cmd.Transaction = tx;
+        cmd.CommandText = $"PRAGMA index_list(\"{tableName}\")";
+        var indices = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using var reader = await cmd.ExecuteReaderAsync();
+        var nameOrdinal = reader.GetOrdinal("name");
+        while (await reader.ReadAsync())
+            indices.Add(reader.GetString(nameOrdinal));
+        return indices;
     }
 }

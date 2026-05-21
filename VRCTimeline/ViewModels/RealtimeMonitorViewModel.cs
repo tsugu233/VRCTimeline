@@ -27,6 +27,38 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     /// <summary>動画 URL の重複検出用</summary>
     private string? _lastVideoUrl;
 
+    /// <summary>
+    /// ProcessLogEntry の直列化用セマフォ。
+    /// LogWatcher から流れ込むイベントは Dispatcher.InvokeAsync で UI スレッドにキューされるが、
+    /// ProcessLogEntry が async void のため、ある呼び出しが await 中に次の呼び出しが割り込む。
+    /// その結果 SaveWorldVisitAsync が _currentWorldVisitId を設定する前に後続の
+    /// PlayerJoined / JoiningInstance / Notification 等が走り、_currentWorldVisitId == null
+    /// ガードで黙って drop されてしまう（InstanceId 欠落・初期プレイヤー取りこぼし・前ワールドへの誤紐付け）。
+    /// セマフォで 1 件ずつ完了を待たせ、await の前後で状態が一貫するようにする。
+    /// HandleVRChatExited も同じセマフォを取り、終了処理と通常イベント処理が交互に走って
+    /// _currentWorldVisitId が null 化された後に新規 WorldVisit が作られて未閉のまま残る
+    /// （次回起動時にゾンビ訪問として復元される）競合を防ぐ。
+    /// </summary>
+    private readonly SemaphoreSlim _processSemaphore = new(1, 1);
+
+    /// <summary>
+    /// Dispose 通知用 CTS。Dispose 時にキャンセルすることで、_processSemaphore.WaitAsync 待ちの
+    /// 進行中ハンドラを OperationCanceledException で抜けさせる。これがないと
+    /// _processSemaphore.Dispose() 後の WaitAsync / Release が ObjectDisposedException を投げ、
+    /// async void 経由で未捕捉例外としてアプリをクラッシュさせる可能性がある。
+    /// </summary>
+    private readonly CancellationTokenSource _disposeCts = new();
+
+    /// <summary>
+    /// StartMonitoring の直列化用セマフォ。
+    /// VRChat の高速 ON/OFF トグルで OnVRChatStatusChanged から StartMonitoring が連続発火されると、
+    /// IsMonitoring = true は2つの await の後に書き込まれるため、関数冒頭のチェックだけでは並走を防げない。
+    /// その結果、複数の LogWatcher（FileSystemWatcher + Timer）が生成され、最後に代入された 1 つだけが
+    /// _logWatcher に残り、他はリークしつつ LogEntryDetected を二重発火する競合が発生する。
+    /// セマフォで開始処理全体を直列化し、待機後にも IsMonitoring を再チェックして二重ガードする。
+    /// </summary>
+    private readonly SemaphoreSlim _startStopSemaphore = new(1, 1);
+
     /// <summary>自分の表示名（プレイヤー一覧から除外するため）</summary>
     private string _selfPlayerName = "";
 
@@ -76,43 +108,64 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     /// <summary>
     /// リアルタイム監視を開始する。
     /// ログファイルから現在状態を復元し、以降のイベントを購読して DB に記録する。
+    /// 同時呼び出しはセマフォで直列化され、IsMonitoring の二重チェックで重複起動を防ぐ。
+    /// 重い <see cref="LogWatcher.ParseCurrentState"/> はバックグラウンドスレッドで実行する
+    /// （長時間プレイで 100MB を超えるログを 2 パス走査するため、UI スレッドで動かすと数秒〜十数秒固まる）。
     /// </summary>
-    public async void StartMonitoring()
+    public async Task StartMonitoring()
     {
         if (IsMonitoring) return;
 
-        _selfPlayerName = await _selfPlayer.GetSelfPlayerNameAsync();
-        _selfPlayerUserId = await _selfPlayer.GetSelfUserIdAsync();
-
-        _logWatcher = new LogWatcher(_settingsService.Settings.VRChatLogDirectory);
-
-        // 現在のセッション状態を復元（ワールド名・プレイヤーリスト）
-        var state = _logWatcher.ParseCurrentState();
-        if (state != null)
-        {
-            CurrentWorldName = state.WorldName ?? LocalizationService.GetString("Str_NotConnected");
-            CurrentInstanceId = state.InstanceId ?? string.Empty;
-            CurrentPlayers.Clear();
-            foreach (var player in state.CurrentPlayers)
-                CurrentPlayers.Add(player);
-            PlayerCount = CurrentPlayers.Count;
-        }
-
-        // 未閉のワールド訪問IDを取得（前回異常終了時の継続用）
         try
         {
-            await using var db = new AppDbContext();
-            var visit = await db.WorldVisits
-                .Where(v => v.LeftAt == null)
-                .OrderByDescending(v => v.JoinedAt)
-                .FirstOrDefaultAsync();
-            _currentWorldVisitId = visit?.Id;
+            await _startStopSemaphore.WaitAsync(_disposeCts.Token);
         }
-        catch { }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
 
-        _logWatcher.LogEntryDetected += OnLogEntryDetected;
-        _logWatcher.Start();
-        IsMonitoring = true;
+        try
+        {
+            // 待機中に他スレッドが先行起動した／Dispose 済みのケースを排除
+            if (IsMonitoring) return;
+
+            _selfPlayerName = await _selfPlayer.GetSelfPlayerNameAsync();
+            _selfPlayerUserId = await _selfPlayer.GetSelfUserIdAsync();
+
+            // 半端な初期化状態でフィールドが見えないように、購読・Start 完了後に _logWatcher へ代入する
+            var watcher = new LogWatcher(_settingsService.Settings.VRChatLogDirectory);
+
+            // 現在のセッション状態を復元（ワールド名・プレイヤーリスト）。
+            // ParseCurrentState は最大数百MBのファイルを2回走査するため UI スレッドでは動かさない。
+            var state = await Task.Run(() => watcher.ParseCurrentState());
+            if (state != null)
+            {
+                CurrentWorldName = state.WorldName ?? LocalizationService.GetString("Str_NotConnected");
+                CurrentInstanceId = state.InstanceId ?? string.Empty;
+                CurrentPlayers.Clear();
+                foreach (var player in state.CurrentPlayers)
+                    CurrentPlayers.Add(player.DisplayName);
+                PlayerCount = CurrentPlayers.Count;
+            }
+
+            // 起動時の DB 整合化:
+            //   - 未閉訪問が無い、または現在のログ状態と一致しないなら、現セッションを新規 WorldVisit として登録する。
+            //   - 一致するならその ID を引き継いで以後のイベントを紐付ける。
+            //
+            // 「前回 VRChat 起動中にアプリだけ終了 → 別ログで別ワールドに居る状態でアプリ再起動」というシナリオでは、
+            // LogWatcher はファイル末尾から監視を始めるため "Entering Room" 行が二度発火せず、
+            // 現ワールドが永遠に DB に書かれず、過去ワールドへ誤紐付けされる不具合があった。
+            // ここで明示的に新規 WorldVisit を作ることでその欠落を埋める。
+            await ReconcileCurrentVisitAsync(state);
+
+            watcher.LogEntryDetected += OnLogEntryDetected;
+            watcher.Start();
+            _logWatcher = watcher;
+            IsMonitoring = true;
+        }
+        finally
+        {
+            try { _startStopSemaphore.Release(); } catch (ObjectDisposedException) { }
+        }
     }
 
     /// <summary>リアルタイム監視を停止する</summary>
@@ -137,17 +190,120 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     public async void HandleVRChatExited()
     {
         StopMonitoring();
-        await CloseCurrentWorldVisitAsync();
-        CurrentWorldName = LocalizationService.GetString("Str_NotConnected");
-        CurrentInstanceId = string.Empty;
-        CurrentPlayers.Clear();
-        PlayerCount = 0;
-        LogEntries.Insert(0, new LogEntry
+
+        // 進行中の ProcessLogEntry を完走させてから終了処理に入る。
+        // これがないと SaveWorldVisitAsync が新しい WorldVisit を作って _currentWorldVisitId を
+        // 上書きするレースで、CloseCurrentWorldVisitAsync が古い ID を閉じ → 新 ID は閉じられず
+        // LeftAt = null のゾンビ訪問が DB に残る。
+        try
         {
-            Timestamp = DateTime.Now,
-            Type = LogEntryType.Info,
-            Message = LocalizationService.GetString("Log_VRChatExited")
-        });
+            await _processSemaphore.WaitAsync(_disposeCts.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+
+        try
+        {
+            await CloseCurrentWorldVisitAsync();
+            CurrentWorldName = LocalizationService.GetString("Str_NotConnected");
+            CurrentInstanceId = string.Empty;
+            CurrentPlayers.Clear();
+            PlayerCount = 0;
+            LogEntries.Insert(0, new LogEntry
+            {
+                Timestamp = DateTime.Now,
+                Type = LogEntryType.Info,
+                Message = LocalizationService.GetString("Log_VRChatExited")
+            });
+        }
+        finally
+        {
+            try { _processSemaphore.Release(); } catch (ObjectDisposedException) { }
+        }
+    }
+
+    /// <summary>
+    /// 起動時に、ログから復元した現在状態と DB の未閉訪問を突き合わせて整合化する。
+    ///
+    /// 判定ルール:
+    ///   ・state == null（VRChat 未接続 or ログ未生成）→ 未閉訪問があれば閉じて DB を綺麗にする。
+    ///   ・未閉訪問が現状態と一致（WorldName / InstanceId / JoinedAt が同じ）→ ID を引き継ぐ。
+    ///   ・一致しない未閉訪問が残っている → ゾンビなので閉じる。LeftAt は確定できないため
+    ///     JoinedAt を入れて 0 秒記録扱いとし、長期間「滞在中」表示が残るのを防ぐ。
+    ///   ・引き継げる未閉訪問が無い & state が現ワールドを示す → 新規 WorldVisit を作って
+    ///     初期プレイヤーを PlayerSession として書き込む。
+    /// </summary>
+    private async Task ReconcileCurrentVisitAsync(CurrentSessionState? state)
+    {
+        try
+        {
+            await using var db = new AppDbContext();
+            var existing = await db.WorldVisits
+                .Include(v => v.PlayerSessions)
+                .Where(v => v.LeftAt == null)
+                .OrderByDescending(v => v.JoinedAt)
+                .FirstOrDefaultAsync();
+
+            if (state == null || state.WorldName == null)
+            {
+                // ログから現状態を取れなかった: ゾンビ訪問だけ閉じて終わる
+                if (existing != null)
+                {
+                    existing.LeftAt = existing.JoinedAt;
+                    foreach (var s in existing.PlayerSessions.Where(s => s.LeftAt == null))
+                        s.LeftAt = existing.JoinedAt;
+                    await db.SaveChangesAsync();
+                }
+                _currentWorldVisitId = null;
+                return;
+            }
+
+            // 既存訪問が現状態と完全一致 → 継続
+            if (existing != null &&
+                existing.WorldName == state.WorldName &&
+                existing.InstanceId == (state.InstanceId ?? string.Empty) &&
+                existing.JoinedAt == state.JoinedAt)
+            {
+                _currentWorldVisitId = existing.Id;
+                return;
+            }
+
+            // 既存訪問は別ワールド／別セッションのゾンビ → 閉じる
+            if (existing != null)
+            {
+                existing.LeftAt = existing.JoinedAt;
+                foreach (var s in existing.PlayerSessions.Where(s => s.LeftAt == null))
+                    s.LeftAt = existing.JoinedAt;
+                await db.SaveChangesAsync();
+            }
+
+            // 現在のワールドを新規訪問として登録する
+            var instanceId = state.InstanceId ?? string.Empty;
+            var visit = new WorldVisit
+            {
+                WorldName = state.WorldName,
+                InstanceId = instanceId,
+                WorldId = string.IsNullOrEmpty(instanceId) ? string.Empty : LogPatterns.ExtractWorldId(instanceId),
+                JoinedAt = state.JoinedAt
+            };
+            db.WorldVisits.Add(visit);
+            await db.SaveChangesAsync();
+
+            foreach (var p in state.CurrentPlayers)
+            {
+                db.PlayerSessions.Add(new PlayerSession
+                {
+                    WorldVisitId = visit.Id,
+                    DisplayName = p.DisplayName,
+                    UserId = p.UserId,
+                    JoinedAt = p.JoinedAt
+                });
+            }
+            await db.SaveChangesAsync();
+
+            _currentWorldVisitId = visit.Id;
+        }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>現在のワールド訪問と未閉セッションを閉じる</summary>
@@ -169,7 +325,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
             }
             _currentWorldVisitId = null;
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>
@@ -178,67 +334,81 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     /// </summary>
     private async void ProcessLogEntry(LogEntry entry)
     {
-        switch (entry.Type)
+        try
         {
-            // ── ワールド入室 / インスタンス接続 ──
-            case LogEntryType.RoomJoin:
-                if (entry.WorldName != null)
-                {
-                    CurrentWorldName = entry.WorldName;
-                    CurrentPlayers.Clear();
-                    PlayerCount = 0;
-                    _lastVideoUrl = null;
-                    await SaveWorldVisitAsync(entry);
-                }
-                if (entry.InstanceId != null)
-                {
-                    CurrentInstanceId = entry.InstanceId;
-                    await UpdateInstanceIdAsync(entry.InstanceId);
-                }
-                break;
-
-            // ── プレイヤー入室 ──
-            case LogEntryType.PlayerJoined:
-                if (entry.PlayerName != null)
-                {
-                    if (entry.PlayerName == _selfPlayerName)
-                        entry.Message = string.Format(LocalizationService.GetString("Log_SelfJoined"), CurrentWorldName);
-                    if (!CurrentPlayers.Contains(entry.PlayerName))
-                    {
-                        CurrentPlayers.Add(entry.PlayerName);
-                        PlayerCount = CurrentPlayers.Count;
-                    }
-                    await SavePlayerJoinAsync(entry);
-                }
-                break;
-
-            // ── プレイヤー退室 ──
-            case LogEntryType.PlayerLeft:
-                if (entry.PlayerName != null)
-                {
-                    if (entry.PlayerName == _selfPlayerName)
-                        entry.Message = string.Format(LocalizationService.GetString("Log_SelfLeft"), CurrentWorldName);
-                    CurrentPlayers.Remove(entry.PlayerName);
-                    PlayerCount = CurrentPlayers.Count;
-                    await SavePlayerLeftAsync(entry);
-                }
-                break;
-
-            case LogEntryType.Notification:
-                await SaveNotificationAsync(entry);
-                break;
-
-            case LogEntryType.VideoUrl:
-                await SaveVideoAsync(entry);
-                break;
+            await _processSemaphore.WaitAsync(_disposeCts.Token);
         }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
 
-        // ログ一覧に追加（ワールド入室・動画は別 UI で表示するため除外）
-        if (entry.Type is not (LogEntryType.RoomJoin or LogEntryType.VideoUrl))
+        try
         {
-            LogEntries.Insert(0, entry);
-            if (LogEntries.Count > 500)
-                LogEntries.RemoveAt(LogEntries.Count - 1);
+            switch (entry.Type)
+            {
+                // ── ワールド入室 / インスタンス接続 ──
+                case LogEntryType.RoomJoin:
+                    if (entry.WorldName != null)
+                    {
+                        CurrentWorldName = entry.WorldName;
+                        CurrentPlayers.Clear();
+                        PlayerCount = 0;
+                        _lastVideoUrl = null;
+                        await SaveWorldVisitAsync(entry);
+                    }
+                    if (entry.InstanceId != null)
+                    {
+                        CurrentInstanceId = entry.InstanceId;
+                        await UpdateInstanceIdAsync(entry.InstanceId);
+                    }
+                    break;
+
+                // ── プレイヤー入室 ──
+                case LogEntryType.PlayerJoined:
+                    if (entry.PlayerName != null)
+                    {
+                        if (entry.PlayerName == _selfPlayerName)
+                            entry.Message = string.Format(LocalizationService.GetString("Log_SelfJoined"), CurrentWorldName);
+                        if (!CurrentPlayers.Contains(entry.PlayerName))
+                        {
+                            CurrentPlayers.Add(entry.PlayerName);
+                            PlayerCount = CurrentPlayers.Count;
+                        }
+                        await SavePlayerJoinAsync(entry);
+                    }
+                    break;
+
+                // ── プレイヤー退室 ──
+                case LogEntryType.PlayerLeft:
+                    if (entry.PlayerName != null)
+                    {
+                        if (entry.PlayerName == _selfPlayerName)
+                            entry.Message = string.Format(LocalizationService.GetString("Log_SelfLeft"), CurrentWorldName);
+                        CurrentPlayers.Remove(entry.PlayerName);
+                        PlayerCount = CurrentPlayers.Count;
+                        await SavePlayerLeftAsync(entry);
+                    }
+                    break;
+
+                case LogEntryType.Notification:
+                    await SaveNotificationAsync(entry);
+                    break;
+
+                case LogEntryType.VideoUrl:
+                    await SaveVideoAsync(entry);
+                    break;
+            }
+
+            // ログ一覧に追加（ワールド入室・動画は別 UI で表示するため除外）
+            if (entry.Type is not (LogEntryType.RoomJoin or LogEntryType.VideoUrl))
+            {
+                LogEntries.Insert(0, entry);
+                if (LogEntries.Count > 500)
+                    LogEntries.RemoveAt(LogEntries.Count - 1);
+            }
+        }
+        finally
+        {
+            try { _processSemaphore.Release(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -270,7 +440,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
             await db.SaveChangesAsync();
             _currentWorldVisitId = visit.Id;
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>現在のワールド訪問にインスタンスIDとワールドIDを設定する</summary>
@@ -288,7 +458,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 await db.SaveChangesAsync();
             }
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>プレイヤー入室セッションを DB に保存する（UserId 付き）</summary>
@@ -307,7 +477,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
             });
             await db.SaveChangesAsync();
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>
@@ -338,7 +508,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 await db.SaveChangesAsync();
             }
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>通知レコードを DB に保存する</summary>
@@ -357,7 +527,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
             });
             await db.SaveChangesAsync();
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     /// <summary>動画再生レコードを DB に保存する（同一 URL の重複は排除）</summary>
@@ -382,13 +552,22 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 await db.SaveChangesAsync();
             }
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     public void Dispose()
     {
         StopMonitoring();
         LocalizationService.LanguageChanged -= OnLanguageChanged;
+
+        // 進行中ハンドラに先にキャンセルを通知してから semaphore を破棄する。
+        // これがないと WaitAsync 中のハンドラが ObjectDisposedException を投げ、
+        // async void 経由で未捕捉となりアプリがクラッシュする可能性がある。
+        try { _disposeCts.Cancel(); } catch (ObjectDisposedException) { }
+
+        _processSemaphore.Dispose();
+        _startStopSemaphore.Dispose();
+        _disposeCts.Dispose();
         GC.SuppressFinalize(this);
     }
 }

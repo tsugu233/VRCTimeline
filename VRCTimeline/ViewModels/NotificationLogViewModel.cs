@@ -13,12 +13,18 @@ namespace VRCTimeline.ViewModels;
 /// 通知ログ画面の ViewModel。
 /// VRChat の通知（Invite、Request Invite、Boop）をフィルタリングして一覧表示する。
 /// </summary>
-public partial class NotificationLogViewModel : ObservableObject
+public partial class NotificationLogViewModel : ObservableObject, IDisposable
 {
     private readonly LoadingService _loading;
 
     /// <summary>初回ロード完了フラグ</summary>
     private bool _initialized;
+
+    /// <summary>FilterDateTo を「今日」に追従させるかどうか（日付またぎ時の自動更新用）</summary>
+    private bool _filterDateToFollowsToday = true;
+
+    /// <summary>日付またぎを検知して FilterDateTo を更新するためのウォッチャー</summary>
+    private readonly DayChangeWatcher _dayChangeWatcher;
 
     /// <summary>送信者名のフィルターテキスト</summary>
     [ObservableProperty]
@@ -32,9 +38,9 @@ public partial class NotificationLogViewModel : ObservableObject
     [ObservableProperty]
     private DateTime _filterDateFrom = DateTime.Today.AddDays(-30);
 
-    /// <summary>表示期間の終了日</summary>
+    /// <summary>表示期間の終了日（選択日を含む）</summary>
     [ObservableProperty]
-    private DateTime _filterDateTo = DateTime.Today.AddDays(1);
+    private DateTime _filterDateTo = DateTime.Today;
 
     /// <summary>通知レコードの表示リスト</summary>
     public ObservableCollection<NotificationDisplayItem> Notifications { get; } = [];
@@ -47,6 +53,16 @@ public partial class NotificationLogViewModel : ObservableObject
         _loading = loadingService;
         RebuildTypeFilters();
         LocalizationService.LanguageChanged += OnLanguageChanged;
+        _dayChangeWatcher = new DayChangeWatcher(() =>
+        {
+            if (_filterDateToFollowsToday) FilterDateTo = DateTime.Today;
+        });
+    }
+
+    /// <summary>ユーザーが終了日を変更した際、その値が「今日」かどうかを記録する</summary>
+    partial void OnFilterDateToChanged(DateTime value)
+    {
+        _filterDateToFollowsToday = value.Date == DateTime.Today;
     }
 
     private void OnLanguageChanged()
@@ -55,6 +71,12 @@ public partial class NotificationLogViewModel : ObservableObject
         RebuildTypeFilters();
         if (wasAll)
             SelectedTypeFilter = TypeFilters[0];
+
+        // ReceivedAtDisplay は曜日略称を含むカルチャ依存の文字列。
+        // INotifyPropertyChanged 経由で UI に再評価させないと、検索などで一覧が再構築されるまで
+        // 古いカルチャの曜日表記が残り続けてしまう。
+        foreach (var n in Notifications)
+            n.RefreshLocalizedStrings();
     }
 
     /// <summary>言語に合わせてフィルター選択肢を再構築する</summary>
@@ -89,61 +111,68 @@ public partial class NotificationLogViewModel : ObservableObject
         _loading.Show("通知ログを読み込み中...");
         try
         {
-            await using var db = new AppDbContext();
-
-            var query = db.NotificationRecords
-                .Include(n => n.WorldVisit)
-                .Where(n => n.ReceivedAt >= FilterDateFrom && n.ReceivedAt <= FilterDateTo);
-
-            // 種別フィルター（"すべて" 相当かどうかは言語に依存しない IsAllFilter で判定）
-            if (!IsAllFilter(SelectedTypeFilter))
-            {
-                var typeKey = SelectedTypeFilter switch
-                {
-                    "Invite" => "invite",
-                    "Request Invite" => "requestInvite",
-                    "Boop" => "boop",
-                    _ => ""
-                };
-                if (!string.IsNullOrEmpty(typeKey))
-                    query = query.Where(n => n.NotificationType == typeKey);
-            }
-
-            var allRecords = await query
-                .OrderByDescending(n => n.ReceivedAt)
-                .ToListAsync();
-
-            // 送信者名フィルター（かな文字差異を無視）
-            if (!string.IsNullOrWhiteSpace(SearchPlayerName))
-            {
-                var search = SearchPlayerName.Trim();
-                allRecords = allRecords.Where(n =>
-                    KanaHelper.ContainsKanaInsensitive(n.SenderName, search)).ToList();
-            }
-
-            var records = allRecords.Take(500).ToList();
-
-            Notifications.Clear();
-            foreach (var r in records)
-            {
-                Notifications.Add(new NotificationDisplayItem
-                {
-                    ReceivedAt = r.ReceivedAt,
-                    SenderName = LogPatterns.CleanPlayerName(r.SenderName),
-                    NotificationType = r.NotificationType switch
-                    {
-                        "invite" => "Invite",
-                        "requestInvite" => "Request Invite",
-                        "boop" => "Boop",
-                        _ => r.NotificationType
-                    },
-                    WorldName = r.WorldVisit?.WorldName
-                });
-            }
+            await LoadNotificationsCoreAsync();
         }
+        catch (Exception ex) { AppLogger.LogError(ex); }
         finally
         {
             _loading.Hide();
+        }
+    }
+
+    /// <summary>LoadNotificationsAsync の本体。例外は呼び出し側の catch で AppLogger に記録される。</summary>
+    private async Task LoadNotificationsCoreAsync()
+    {
+        await using var db = new AppDbContext();
+
+        var query = db.NotificationRecords
+            .Include(n => n.WorldVisit)
+            .Where(n => n.ReceivedAt >= FilterDateFrom && n.ReceivedAt < FilterDateTo.Date.AddDays(1));
+
+        // 種別フィルター（"すべて" 相当かどうかは言語に依存しない IsAllFilter で判定）
+        if (!IsAllFilter(SelectedTypeFilter))
+        {
+            var typeKey = SelectedTypeFilter switch
+            {
+                "Invite" => "invite",
+                "Request Invite" => "requestInvite",
+                "Boop" => "boop",
+                _ => ""
+            };
+            if (!string.IsNullOrEmpty(typeKey))
+                query = query.Where(n => n.NotificationType == typeKey);
+        }
+
+        var allRecords = await query
+            .OrderByDescending(n => n.ReceivedAt)
+            .ToListAsync();
+
+        // 送信者名フィルター（かな文字差異を無視）
+        if (!string.IsNullOrWhiteSpace(SearchPlayerName))
+        {
+            var search = SearchPlayerName.Trim();
+            allRecords = allRecords.Where(n =>
+                KanaHelper.ContainsKanaInsensitive(n.SenderName, search)).ToList();
+        }
+
+        var records = allRecords.Take(500).ToList();
+
+        Notifications.Clear();
+        foreach (var r in records)
+        {
+            Notifications.Add(new NotificationDisplayItem
+            {
+                ReceivedAt = r.ReceivedAt,
+                SenderName = LogPatterns.CleanPlayerName(r.SenderName),
+                NotificationType = r.NotificationType switch
+                {
+                    "invite" => "Invite",
+                    "requestInvite" => "Request Invite",
+                    "boop" => "Boop",
+                    _ => r.NotificationType
+                },
+                WorldName = r.WorldVisit?.WorldName
+            });
         }
     }
 
@@ -154,13 +183,26 @@ public partial class NotificationLogViewModel : ObservableObject
         SearchPlayerName = playerName;
         await LoadNotificationsAsync();
     }
+
+    /// <summary>
+    /// 静的イベントの購読解除と DayChangeWatcher のタイマー停止を行う。
+    /// 現状は Singleton 登録なのでアプリ終了時に DI コンテナから呼ばれる。
+    /// </summary>
+    public void Dispose()
+    {
+        LocalizationService.LanguageChanged -= OnLanguageChanged;
+        _dayChangeWatcher.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }
 
 /// <summary>
 /// 通知ログ画面の表示用モデル。
 /// DB エンティティ (NotificationRecord) から変換して使用する。
+/// 言語切替で再フォーマットさせる必要がある日時表示プロパティのため、
+/// INotifyPropertyChanged を持つ ObservableObject を継承している。
 /// </summary>
-public class NotificationDisplayItem
+public class NotificationDisplayItem : ObservableObject
 {
     /// <summary>通知受信日時</summary>
     public DateTime ReceivedAt { get; set; }
@@ -185,4 +227,13 @@ public class NotificationDisplayItem
         "Boop" => "HandWave",
         _ => "Bell"
     };
+
+    /// <summary>
+    /// 言語切替時に呼び出されるリフレッシュ。曜日略称を含むカルチャ依存プロパティの
+    /// 再評価を WPF バインディングに促す。
+    /// </summary>
+    public void RefreshLocalizedStrings()
+    {
+        OnPropertyChanged(nameof(ReceivedAtDisplay));
+    }
 }

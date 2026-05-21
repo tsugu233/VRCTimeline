@@ -17,8 +17,7 @@
             FilterDateTo="{Binding FilterDateTo}"
             PlayerFilterText="{Binding SearchPlayerName}"
             WorldFilterText="{Binding SearchWorldName}"
-            SearchCommand="{Binding LoadHistoryCommand}"
-            ShowProgressBar="{Binding IsLoading}" />
+            SearchCommand="{Binding LoadHistoryCommand}" />
 
         <!-- Visit Detail Panel (always visible) -->
         <materialDesign:Card Grid.Row="1" Padding="16" Margin="0,0,0,12"

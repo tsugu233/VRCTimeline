@@ -35,6 +35,13 @@ public class SettingsService
     /// <summary>破損検知時に作成したバックアップファイルのフルパス</summary>
     public string? CorruptionBackupPath { get; private set; }
 
+    /// <summary>
+    /// 直近の LoadAsync で設定ファイルが存在するのに IO 例外で読み込めなかったことを示す。
+    /// このフラグが立っている間、SaveAsync は no-op となり既存ファイルを保護する。
+    /// （デフォルト値で上書き保存し、ユーザの全設定が消失するのを防ぐ）
+    /// </summary>
+    public bool LoadIOFailureDetected { get; private set; }
+
     /// <summary>設定保存時に発火するイベント</summary>
     public event Action? SettingsChanged;
 
@@ -55,14 +62,18 @@ public class SettingsService
                 LoadCorruptionDetected = true;
                 Settings = new AppSettings();
             }
-            // IOException 等は意図的に再スローしない: 一時的な競合の可能性があり、
-            // 上書き保存で正常設定を破壊するリスクがあるためデフォルトに落とす。
+            // IOException / UnauthorizedAccessException はファイルが存在するのに読めない状態。
+            // デフォルト値の Settings で UI を起動するが、SaveAsync は LoadIOFailureDetected が
+            // 立っている間 no-op にしてユーザの既存設定ファイルを保護する。
+            // （issue16: 一時的なロックや権限拒否で設定全消失するのを防ぐ）
             catch (IOException)
             {
+                LoadIOFailureDetected = true;
                 Settings = new AppSettings();
             }
             catch (UnauthorizedAccessException)
             {
+                LoadIOFailureDetected = true;
                 Settings = new AppSettings();
             }
         }
@@ -96,9 +107,15 @@ public class SettingsService
     /// <summary>
     /// 現在の設定を JSON ファイルに保存し、変更イベントを発火する。
     /// SemaphoreSlim で同時呼び出しをシリアル化し、temp ファイル + Move でアトミックに置換する。
+    /// LoadIOFailureDetected が立っている間は no-op となり、既存設定ファイルを保護する。
     /// </summary>
     public async Task SaveAsync()
     {
+        // 読込が IO 失敗していた場合、in-memory はデフォルト値のはず。これで上書きすると
+        // ユーザの実際の設定（テーマ・パス・スタートアップ等）がすべて失われるので保存しない。
+        // アプリ再起動で読込が成功したら自動的に通常動作に戻る。
+        if (LoadIOFailureDetected) return;
+
         await _saveLock.WaitAsync();
         try
         {

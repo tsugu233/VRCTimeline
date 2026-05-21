@@ -1,13 +1,18 @@
+using System.ComponentModel;
 using System.Runtime.InteropServices;
 using System.Windows;
 using System.Windows.Interop;
 using System.Windows.Media;
+using VRCTimeline.ViewModels;
+using VRCTimeline.Views;
 
 namespace VRCTimeline;
 
 /// <summary>
 /// メインウィンドウ。
 /// DWM API を使用してタイトルバーをダークテーマに合わせてカスタマイズする。
+/// また、サイドメニュー切替時の View 再生成を避けるため、各サブ View のインスタンスを
+/// キャッシュして使い回す仕組みを持つ。
 /// </summary>
 public partial class MainWindow : Window
 {
@@ -19,9 +24,77 @@ public partial class MainWindow : Window
     private const int DWMWA_CAPTION_COLOR = 35;
     private const int DWMWA_TEXT_COLOR = 36;
 
+    /// <summary>
+    /// サブ View インスタンスのキャッシュ。Key は対応する ViewModel インスタンス(Singleton)。
+    /// 初回切替時に生成し、以降は使い回す。
+    /// </summary>
+    private readonly Dictionary<object, FrameworkElement> _viewCache = new();
+    private MainViewModel? _vm;
+
     public MainWindow()
     {
         InitializeComponent();
+        Loaded += OnWindowLoaded;
+        Closed += OnWindowClosed;
+    }
+
+    /// <summary>
+    /// MainViewModel.CurrentViewModel の変更を購読し、サブ View の切替を駆動する。
+    /// DataContext は App.xaml.cs:125-127 のコンストラクタで設定されているため Loaded 時点で取得可能。
+    /// </summary>
+    private void OnWindowLoaded(object sender, RoutedEventArgs e)
+    {
+        if (DataContext is not MainViewModel vm) return;
+        _vm = vm;
+        vm.PropertyChanged += OnVmPropertyChanged;
+        ApplyContent(vm.CurrentViewModel);
+    }
+
+    private void OnWindowClosed(object? sender, EventArgs e)
+    {
+        if (_vm != null)
+        {
+            _vm.PropertyChanged -= OnVmPropertyChanged;
+            _vm = null;
+        }
+    }
+
+    private void OnVmPropertyChanged(object? sender, PropertyChangedEventArgs e)
+    {
+        if (e.PropertyName == nameof(MainViewModel.CurrentViewModel) && _vm != null)
+            ApplyContent(_vm.CurrentViewModel);
+    }
+
+    /// <summary>
+    /// 指定 ViewModel に対応する View インスタンスを ContentRoot に設定する。
+    /// 初回はインスタンスを生成してキャッシュへ、2 回目以降はキャッシュから取り出す。
+    /// View を再利用するためスクロール位置・サムネイル BitmapImage 等のビジュアル状態が保持される。
+    /// </summary>
+    private void ApplyContent(object? viewModel)
+    {
+        if (viewModel == null)
+        {
+            ContentRoot.Content = null;
+            return;
+        }
+
+        if (!_viewCache.TryGetValue(viewModel, out var view))
+        {
+            view = viewModel switch
+            {
+                RealtimeMonitorViewModel    => new RealtimeMonitorView(),
+                ActivityHistoryViewModel    => new ActivityHistoryView(),
+                PhotoManagerViewModel       => new PhotoManagerView(),
+                NotificationLogViewModel    => new NotificationLogView(),
+                VideoLogViewModel           => new VideoLogView(),
+                SettingsViewModel           => new SettingsView(),
+                _ => throw new InvalidOperationException(
+                    $"No view mapping for ViewModel type {viewModel.GetType().FullName}")
+            };
+            view.DataContext = viewModel;
+            _viewCache[viewModel] = view;
+        }
+        ContentRoot.Content = view;
     }
 
     /// <summary>ウィンドウハンドル取得後にタイトルバーの色を適用する</summary>

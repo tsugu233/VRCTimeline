@@ -133,19 +133,6 @@
             <Button Content="{DynamicResource Filter_Search}" Command="{Binding SearchCommand, ElementName=Root}"
                     Style="{StaticResource MaterialDesignRaisedButton}"
                     Margin="0,0,0,4" />
-
-            <ProgressBar IsIndeterminate="True" Width="100" Margin="12,0,0,4">
-                <ProgressBar.Style>
-                    <Style TargetType="ProgressBar">
-                        <Setter Property="Visibility" Value="Hidden" />
-                        <Style.Triggers>
-                            <DataTrigger Binding="{Binding ShowProgressBar, ElementName=Root}" Value="True">
-                                <Setter Property="Visibility" Value="Visible" />
-                            </DataTrigger>
-                        </Style.Triggers>
-                    </Style>
-                </ProgressBar.Style>
-            </ProgressBar>
         </WrapPanel>
     </materialDesign:Card>
 </UserControl>

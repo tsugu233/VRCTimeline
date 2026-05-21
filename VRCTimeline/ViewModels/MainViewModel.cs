@@ -134,7 +134,10 @@ public partial class MainViewModel : ObservableObject
             IsVRChatRunning = isRunning;
             if (isRunning)
             {
-                RealtimeMonitorVm.StartMonitoring();
+                // StartMonitoring は async Task。Dispatcher.Invoke は同期ディスパッチのため await できないので
+                // fire-and-forget するが、未捕捉例外でアプリがクラッシュしないようラッパーで握る
+                // （内部のセマフォで直列化されるので、トグル連打でも二重起動しない）。
+                _ = StartMonitoringSafeAsync();
                 if (_settingsService.Settings.AutoDetectVRChat)
                 {
                     var mainWin = Application.Current.MainWindow;
@@ -151,5 +154,18 @@ public partial class MainViewModel : ObservableObject
                 RealtimeMonitorVm.HandleVRChatExited();
             }
         });
+    }
+
+    /// <summary>StartMonitoring を fire-and-forget で安全に呼び出すためのラッパー</summary>
+    private async Task StartMonitoringSafeAsync()
+    {
+        try
+        {
+            await RealtimeMonitorVm.StartMonitoring();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"StartMonitoring failed: {ex}");
+        }
     }
 }

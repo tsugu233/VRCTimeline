@@ -32,15 +32,25 @@ public class VRChatProcessMonitor : IDisposable
     {
         try
         {
-            IsVRChatRunning = Process.GetProcessesByName("VRChat").Length > 0;
-            if (IsVRChatRunning != _wasRunning)
+            var processes = Process.GetProcessesByName("VRChat");
+            try
             {
-                _wasRunning = IsVRChatRunning;
-                VRChatStatusChanged?.Invoke(IsVRChatRunning);
+                IsVRChatRunning = processes.Length > 0;
+                if (IsVRChatRunning != _wasRunning)
+                {
+                    _wasRunning = IsVRChatRunning;
+                    VRChatStatusChanged?.Invoke(IsVRChatRunning);
+                }
+            }
+            finally
+            {
+                foreach (var p in processes) p.Dispose();
             }
         }
         catch
         {
+            // プロセス列挙はアクセス権限や OS の一時状態で稀に失敗する。
+            // ポーリングで再試行されるため、ここでは黙って次回ティックに委ねる。
         }
     }
 
