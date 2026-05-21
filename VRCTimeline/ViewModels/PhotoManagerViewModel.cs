@@ -131,8 +131,20 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
     [ObservableProperty]
     private string _playerTotalTime = "";
 
-    /// <summary>ワールド訪問ごとにグループ化された写真の一覧</summary>
+    /// <summary>
+    /// ワールド訪問ごとにグループ化された写真の一覧。
+    /// OnPhotoAdded での「既存グループの検索」など内部状態管理に使用する。
+    /// 表示用バインディングは <see cref="Photos"/> + XAML 側 CollectionViewSource のグループ化で行う。
+    /// </summary>
     public ObservableCollection<PhotoGroupDisplay> PhotoGroups { get; } = [];
+
+    /// <summary>
+    /// 全写真の平坦リスト。View 側で CollectionViewSource により <see cref="PhotoDisplayItem.Group"/> でグループ化し、
+    /// VirtualizingWrapPanel で表示する。各 item は属する <see cref="PhotoGroupDisplay"/> への参照を持つ。
+    /// グループの並び順は、最初に出現するアイテムの位置で決まる（CollectionView の仕様）ため、
+    /// 「最新グループを先頭」を保つには新規グループの最初の写真を Photos の先頭に挿入する。
+    /// </summary>
+    public ObservableCollection<PhotoDisplayItem> Photos { get; } = [];
 
     /// <summary>選択中の写真に関連するプレイヤーの一覧</summary>
     public ObservableCollection<PlayerDisplay> SelectedPhotoPlayers { get; } = [];
@@ -271,16 +283,31 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             if (group != null)
             {
                 group.Photos.Insert(0, item);
+                item.Group = group;
+
+                // Photos（平坦リスト）にも反映: 既存グループ内の先頭位置へ挿入することで
+                // CollectionView 上の within-group 順序が「最新が先頭」を保つ。
+                var firstIdx = IndexOfFirstInGroup(group);
+                if (firstIdx >= 0)
+                    Photos.Insert(firstIdx, item);
+                else
+                    Photos.Insert(0, item); // 念のためのフォールバック
             }
             else
             {
-                PhotoGroups.Insert(0, new PhotoGroupDisplay
+                var newGroup = new PhotoGroupDisplay
                 {
                     WorldName = info.WorldName ?? "不明なワールド",
                     JoinedAt = info.WorldJoinedAt ?? info.TakenAt,
                     WorldVisitId = info.WorldVisitId,
                     Photos = new ObservableCollection<PhotoDisplayItem> { item }
-                });
+                };
+                item.Group = newGroup;
+                PhotoGroups.Insert(0, newGroup);
+
+                // 新グループの最初の写真を Photos 先頭に入れることで、CollectionView のグループ順が
+                // 「新しいグループほど先頭」を保つ（CollectionView は最初に出現した順で並ぶ）。
+                Photos.Insert(0, item);
             }
 
             HasNoPhotos = false;
@@ -500,29 +527,35 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                 _isInitialLoad = false;
 
                 // ── ワールド訪問ごとにグループ化 ──
+                // 各 PhotoDisplayItem に属するグループへの参照(Group)を設定する。
+                // この参照は View 側で CollectionViewSource のグループ化キーに使われ、
+                // VirtualizingWrapPanel + GroupStyle による仮想化表示で同一グループ判定の根拠になる。
                 var groups = photos.Count == 0 ? [] : photos
                     .GroupBy(p => p.WorldVisitId ?? -p.Id)
                     .Select(g =>
                     {
                         var first = g.First();
-                        return new PhotoGroupDisplay
+                        var groupDisplay = new PhotoGroupDisplay
                         {
                             WorldName = first.WorldVisit?.WorldName ?? "不明なワールド",
                             JoinedAt = first.WorldVisit?.JoinedAt ?? first.TakenAt,
                             LeftAt = first.WorldVisit?.LeftAt,
                             WorldVisitId = first.WorldVisitId,
-                            Photos = new ObservableCollection<PhotoDisplayItem>(
-                                g.OrderByDescending(p => p.TakenAt).Select(p => new PhotoDisplayItem
-                                {
-                                    FilePath = p.FilePath,
-                                    FileName = p.FileName,
-                                    TakenAt = p.TakenAt,
-                                    WorldName = p.WorldVisit?.WorldName,
-                                    WorldJoinedAt = p.WorldVisit?.JoinedAt,
-                                    WorldLeftAt = p.WorldVisit?.LeftAt,
-                                    WorldVisitId = p.WorldVisitId
-                                }))
                         };
+                        var items = new ObservableCollection<PhotoDisplayItem>(
+                            g.OrderByDescending(p => p.TakenAt).Select(p => new PhotoDisplayItem
+                            {
+                                FilePath = p.FilePath,
+                                FileName = p.FileName,
+                                TakenAt = p.TakenAt,
+                                WorldName = p.WorldVisit?.WorldName,
+                                WorldJoinedAt = p.WorldVisit?.JoinedAt,
+                                WorldLeftAt = p.WorldVisit?.LeftAt,
+                                WorldVisitId = p.WorldVisitId,
+                                Group = groupDisplay
+                            }));
+                        groupDisplay.Photos = items;
+                        return groupDisplay;
                     })
                     .OrderByDescending(g => g.JoinedAt)
                     .ToList();
@@ -635,6 +668,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
 
             // ── UI 更新 ──
             PhotoGroups.Clear();
+            Photos.Clear();
             SelectedPhoto = null;
             _currentVisitPlayers = [];
             _currentVisitWorldName = "";
@@ -669,6 +703,9 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             // IsIndeterminate スピナーが UI スレッド駆動のため止まって見えるので、
             // 一定枚数ごとに Dispatcher へ制御を返し描画フレームを進めさせる。
             // 併せて LoadingService のサブメッセージで "処理済み / 全体" の進捗を表示する。
+            // VirtualizingWrapPanel 導入により可視範囲外のカードは生成されないため、
+            // 一括追加でも UI スレッドの詰まりは大幅に減るが、進捗表示と UI 応答性のために
+            // 従来同様の Yield ロジックを維持する。Photos（平坦リスト）と PhotoGroups の両方に追加する。
             const int yieldEveryPhotos = 50;
             int photosSinceYield = 0;
             int processedPhotos = 0;
@@ -676,6 +713,8 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             foreach (var g in result.groups)
             {
                 PhotoGroups.Add(g);
+                foreach (var p in g.Photos)
+                    Photos.Add(p);
                 processedPhotos += g.Photos.Count;
                 photosSinceYield += g.Photos.Count;
                 if (photosSinceYield >= yieldEveryPhotos)
@@ -716,6 +755,22 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         {
             _loading.Hide();
         }
+    }
+
+    /// <summary>
+    /// 指定グループに属する最初の写真の <see cref="Photos"/> 内インデックスを返す。
+    /// 見つからなければ -1。OnPhotoAdded で既存グループの先頭に新着写真を差し込むために使う。
+    /// 線形探索だが、PhotoWatcher の通知頻度（数秒〜数分に 1 度）と
+    /// 想定表示枚数（数百〜数千）から実用上問題ない。
+    /// </summary>
+    private int IndexOfFirstInGroup(PhotoGroupDisplay group)
+    {
+        for (int i = 0; i < Photos.Count; i++)
+        {
+            if (ReferenceEquals(Photos[i].Group, group))
+                return i;
+        }
+        return -1;
     }
 
     /// <summary>表示中の写真枚数をステータスバーに反映する</summary>
@@ -910,6 +965,37 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
+    /// Window 非表示時に表示用リソースを破棄する。
+    /// Singleton VM そのものは生存し続けるため、再表示時には UserControl_Loaded → InitializeAsync で再ロードできるよう
+    /// 初期化フラグをリセットする。DB 接続・PhotoWatcher 購読・LocalizationService 購読・DayChangeWatcher は触らない
+    /// （これらは VM ライフタイム全体で必要なため）。
+    /// _maintenanceDone は意図的に維持: セッション中の DB メンテナンスは 1 回で十分。
+    /// </summary>
+    public void ReleaseUiResources()
+    {
+        PhotoGroups.Clear();
+        Photos.Clear();
+        SelectedPhoto = null;
+        SelectedPhotoPlayers.Clear();
+        HasNoPhotos = false;
+        StatusText = string.Empty;
+        DateRangeText = string.Empty;
+        HasPlayerSummary = false;
+        PlayerEncounterCount = 0;
+        PlayerTotalTime = string.Empty;
+        _currentVisitPlayers = [];
+        _currentVisitWorldName = "";
+        _currentVisitJoinedAt = null;
+        _currentVisitLeftAt = null;
+        _filterWorldVisitId = null;
+        _searchPlayerUserId = null;
+        _photoMinDate = null;
+        _photoMaxDate = null;
+        _initialized = false;
+        _isInitialLoad = true;
+    }
+
+    /// <summary>
     /// 静的イベントの購読解除と DayChangeWatcher のタイマー停止を行う。
     /// 現状は Singleton 登録なのでアプリ終了時に DI コンテナから呼ばれる。
     /// </summary>
@@ -984,6 +1070,13 @@ public class PhotoDisplayItem : ObservableObject
 
     /// <summary>この写真に関連するプレイヤーリスト（遅延読み込み・キャッシュ）</summary>
     public List<PlayerDisplay> Players { get; set; } = [];
+
+    /// <summary>
+    /// この写真が属するグループ（ワールド訪問単位）への参照。
+    /// View 側で CollectionViewSource のグループ化キーとして用いるため、
+    /// 同一ワールド訪問の全写真は同一の <see cref="PhotoGroupDisplay"/> インスタンスを共有する。
+    /// </summary>
+    public PhotoGroupDisplay? Group { get; set; }
 
     /// <summary>撮影日時の表示文字列</summary>
     public string TakenAtDisplay => DateFormatHelper.FormatDateWithDayAndTime(TakenAt);

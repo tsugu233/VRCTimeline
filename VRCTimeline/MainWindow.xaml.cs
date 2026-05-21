@@ -97,6 +97,37 @@ public partial class MainWindow : Window
         ContentRoot.Content = view;
     }
 
+    /// <summary>
+    /// View キャッシュを破棄して、保持している全 UserControl とその DataContext バインディングを解放する。
+    /// Window 非表示時に呼ばれ、可視ツリー上のビジュアル一式と各 View が抱える BitmapImage 等を GC 対象にする。
+    /// ViewModel 本体（Singleton）は破棄しない: それぞれの ReleaseUiResources で中の表示用コレクションだけクリア済み。
+    /// </summary>
+    /// <param name="keepForViewModel">
+    /// この VM に紐づく View だけはキャッシュから消さず、ContentRoot にも残す。
+    /// 再表示時に即座にその画面を描画させたいケース（例: リアルタイム監視画面）で使用する。
+    /// null の場合は全 View を破棄する。
+    /// </param>
+    public void ClearViewCache(object? keepForViewModel = null)
+    {
+        FrameworkElement? keptView = null;
+        if (keepForViewModel != null)
+            _viewCache.TryGetValue(keepForViewModel, out keptView);
+
+        // 削除対象（kept 以外）の DataContext を null 化して、View → VM の参照を切る。
+        var toRemove = _viewCache
+            .Where(kv => !ReferenceEquals(kv.Value, keptView))
+            .ToList();
+        foreach (var kv in toRemove)
+        {
+            kv.Value.DataContext = null;
+            _viewCache.Remove(kv.Key);
+        }
+
+        // kept view があれば ContentRoot に残し、再表示時に PropertyChanged 経由の ApplyContent が
+        // 走らなくても画面が空にならないようにする。なければ null（次の ApplyContent 待ち）。
+        ContentRoot.Content = keptView;
+    }
+
     /// <summary>ウィンドウハンドル取得後にタイトルバーの色を適用する</summary>
     protected override void OnSourceInitialized(EventArgs e)
     {

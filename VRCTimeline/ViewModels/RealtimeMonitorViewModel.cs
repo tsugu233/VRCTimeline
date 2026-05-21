@@ -168,6 +168,18 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         }
     }
 
+    /// <summary>
+    /// Window 非表示時の表示用リソース解放（現状は意図的に no-op）。
+    /// リアルタイム監視画面は Window 非表示中も View・VM 状態とも保持し続ける方針のため、
+    /// LogEntries・CurrentPlayers・CurrentWorldName いずれもクリアしない。
+    /// LogWatcher / DB 書込パイプラインは元々止めない（VRChat ログ消去対策）。
+    /// メソッドは呼び出し側の統一目的で残す。
+    /// </summary>
+    public void ReleaseUiResources()
+    {
+        // intentionally empty
+    }
+
     /// <summary>リアルタイム監視を停止する</summary>
     public void StopMonitoring()
     {

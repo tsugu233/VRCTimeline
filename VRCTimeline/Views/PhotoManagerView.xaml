@@ -3,7 +3,21 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:controls="clr-namespace:VRCTimeline.Controls"
+             xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
              Loaded="UserControl_Loaded">
+
+    <UserControl.Resources>
+        <!--
+            写真の平坦リストを Group プロパティ（PhotoGroupDisplay 参照）でグループ化する。
+            VirtualizingWrapPanel + ListBox.GroupStyle により、画面外のカードは ListBoxItem ごと破棄され、
+            メモリ上には可視範囲分のビジュアルツリーしか残らない。
+        -->
+        <CollectionViewSource x:Key="PhotosViewSource" Source="{Binding Photos}">
+            <CollectionViewSource.GroupDescriptions>
+                <PropertyGroupDescription PropertyName="Group" />
+            </CollectionViewSource.GroupDescriptions>
+        </CollectionViewSource>
+    </UserControl.Resources>
 
     <Grid Margin="8">
         <Grid.RowDefinitions>
@@ -149,122 +163,147 @@
                    Style="{StaticResource MaterialDesignHeadline6TextBlock}"
                    Opacity="0.5" />
 
-        <!-- Photo Gallery (grouped) -->
-        <ScrollViewer x:Name="PhotoScrollViewer"
-                      Grid.Row="3" VerticalScrollBarVisibility="Auto"
-                      HorizontalScrollBarVisibility="Disabled"
-                      PreviewMouseWheel="PhotoScrollViewer_PreviewMouseWheel"
-                      Visibility="{Binding HasNoPhotos, Converter={StaticResource InverseBoolToVis}}">
-            <ItemsControl ItemsSource="{Binding PhotoGroups}">
-                <ItemsControl.ItemTemplate>
-                    <DataTemplate>
-                        <StackPanel Margin="0,0,0,16">
-                            <!-- Group Header -->
+        <!--
+            Photo Gallery (virtualized).
+            ListBox + CollectionViewSource (group by PhotoDisplayItem.Group) + VirtualizingWrapPanel で、
+            可視範囲外のカードはコンテナごと破棄される。
+            グループヘッダーは GroupStyle.HeaderTemplate で表示する（DataContext は CollectionViewGroup）。
+            外側に ScrollViewer を巻かないこと: 巻くと内側 ListBox に無限高が伝播し全アイテムが実体化される。
+        -->
+        <!--
+            アイテム単位スクロール（CanContentScroll=True）。
+            ピクセルスクロール + IsVirtualizingWhenGrouping=True の組み合わせは VirtualizingWrapPanel で
+            全アイテム測定を誘発しフリーズに繋がる（グループの pixel offset を確定するため）。
+            アイテム単位スクロールでは 1 ティック=既定 3 アイテムしか動かないため、
+            PreviewMouseWheel ハンドラで複数アイテム分まとめてスクロールして体感速度を補う。
+        -->
+        <ListBox x:Name="PhotoListBox" Grid.Row="3"
+                 Visibility="{Binding HasNoPhotos, Converter={StaticResource InverseBoolToVis}}"
+                 ItemsSource="{Binding Source={StaticResource PhotosViewSource}}"
+                 SelectedItem="{Binding SelectedPhoto, Mode=TwoWay}"
+                 Background="Transparent"
+                 BorderThickness="0"
+                 Padding="0"
+                 HorizontalContentAlignment="Stretch"
+                 ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                 ScrollViewer.CanContentScroll="True"
+                 VirtualizingPanel.IsVirtualizing="True"
+                 VirtualizingPanel.VirtualizationMode="Recycling"
+                 VirtualizingPanel.IsVirtualizingWhenGrouping="True"
+                 VirtualizingPanel.CacheLength="1,2"
+                 VirtualizingPanel.CacheLengthUnit="Page"
+                 PreviewMouseWheel="PhotoListBox_PreviewMouseWheel">
+            <ListBox.ItemsPanel>
+                <ItemsPanelTemplate>
+                    <vwp:VirtualizingWrapPanel Orientation="Horizontal" />
+                </ItemsPanelTemplate>
+            </ListBox.ItemsPanel>
+
+            <ListBox.ItemContainerStyle>
+                <Style TargetType="ListBoxItem">
+                    <Setter Property="Padding" Value="0" />
+                    <Setter Property="Margin" Value="0" />
+                    <Setter Property="BorderThickness" Value="0" />
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+                    <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    <Setter Property="Template">
+                        <Setter.Value>
+                            <ControlTemplate TargetType="ListBoxItem">
+                                <ContentPresenter />
+                            </ControlTemplate>
+                        </Setter.Value>
+                    </Setter>
+                </Style>
+            </ListBox.ItemContainerStyle>
+
+            <ListBox.GroupStyle>
+                <GroupStyle>
+                    <GroupStyle.HeaderTemplate>
+                        <DataTemplate>
+                            <!-- DataContext = CollectionViewGroup; Name = PhotoGroupDisplay インスタンス -->
                             <Border Background="{DynamicResource MaterialDesignCardBackground}"
-                                    CornerRadius="4" Padding="12,6" Margin="0,0,0,8">
+                                    CornerRadius="4" Padding="12,6" Margin="0,8,0,8">
                                 <StackPanel Orientation="Horizontal">
                                     <materialDesign:PackIcon Kind="Earth" Width="18" Height="18"
                                                               VerticalAlignment="Center" Margin="0,0,8,0"
                                                               Opacity="0.7" />
-                                    <TextBlock Text="{Binding HeaderDisplay}" FontSize="13" FontWeight="Medium"
+                                    <TextBlock Text="{Binding Name.HeaderDisplay}" FontSize="13" FontWeight="Medium"
                                                VerticalAlignment="Center" />
                                     <materialDesign:PackIcon Kind="ClockTimeFourOutline" Width="15" Height="15"
                                                               VerticalAlignment="Center" Margin="20,0,6,0"
                                                               Opacity="0.5" />
-                                    <TextBlock Text="{Binding HeaderTimeRange}" FontSize="12"
+                                    <TextBlock Text="{Binding Name.HeaderTimeRange}" FontSize="12"
                                                VerticalAlignment="Center" Opacity="0.6" />
                                 </StackPanel>
                             </Border>
+                        </DataTemplate>
+                    </GroupStyle.HeaderTemplate>
+                </GroupStyle>
+            </ListBox.GroupStyle>
 
-                            <!-- Photos in Group -->
-                            <ItemsControl ItemsSource="{Binding Photos}">
-                                <ItemsControl.ItemsPanel>
-                                    <ItemsPanelTemplate>
-                                        <WrapPanel />
-                                    </ItemsPanelTemplate>
-                                </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <materialDesign:Card Width="224" Margin="6"
-                                                            Padding="0"
-                                                            UniformCornerRadius="0"
-                                                            materialDesign:ElevationAssist.Elevation="Dp2"
-                                                            Cursor="Hand"
-                                                            UseLayoutRounding="True">
-                                            <materialDesign:Card.Style>
-                                                <Style TargetType="materialDesign:Card">
-                                                    <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2" />
-                                                    <Setter Property="BorderThickness" Value="0" />
-                                                    <Setter Property="Opacity" Value="0.95" />
-                                                    <Setter Property="Padding" Value="0" />
-                                                    <Style.Triggers>
-                                                        <DataTrigger Value="True">
-                                                            <DataTrigger.Binding>
-                                                                <MultiBinding Converter="{StaticResource EqualityMulti}">
-                                                                    <Binding />
-                                                                    <Binding Path="DataContext.SelectedPhoto"
-                                                                            RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                                </MultiBinding>
-                                                            </DataTrigger.Binding>
-                                                            <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp8" />
-                                                            <Setter Property="Opacity" Value="1" />
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </materialDesign:Card.Style>
-                                            
-                                            <materialDesign:Card.InputBindings>
-                                                <MouseBinding MouseAction="LeftClick"
-                                                            Command="{Binding DataContext.SelectPhotoCommand,
-                                                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding}" />
-                                                <MouseBinding MouseAction="LeftDoubleClick"
-                                                            Command="{Binding DataContext.OpenPhotoFileCommand,
-                                                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                            CommandParameter="{Binding}" />
-                                            </materialDesign:Card.InputBindings>
-                                            <Grid>
-                                                <StackPanel>
-                                                    <Border Height="126"
-                                                            Background="#2A2A2A"
-                                                            ClipToBounds="True">
-                                                        <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
-                                                            Stretch="Uniform" />
-                                                    </Border>
-                                                    <StackPanel Margin="10,6,10,8">
-                                                        <TextBlock Text="{Binding TakenAtDisplay}"
-                                                                FontSize="12" />
-                                                    </StackPanel>
-                                                </StackPanel>
-                                                <Border IsHitTestVisible="False">
-                                                    <Border.Style>
-                                                        <Style TargetType="Border">
-                                                            <Setter Property="BorderThickness" Value="2" />
-                                                            <Setter Property="BorderBrush" Value="Transparent" /> 
-                                                            <Style.Triggers>
-                                                                <DataTrigger Value="True">
-                                                                    <DataTrigger.Binding>
-                                                                        <MultiBinding Converter="{StaticResource EqualityMulti}">
-                                                                            <Binding />
-                                                                            <Binding Path="DataContext.SelectedPhoto"
-                                                                                    RelativeSource="{RelativeSource AncestorType=UserControl}" />
-                                                                        </MultiBinding>
-                                                                    </DataTrigger.Binding>
-                                                                    <Setter Property="BorderBrush" Value="{DynamicResource PrimaryHueLightBrush}" />
-                                                                </DataTrigger>
-                                                            </Style.Triggers>
-                                                        </Style>
-                                                    </Border.Style>
-                                                </Border>
-                                            </Grid>
-                                        </materialDesign:Card>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
-                            </ItemsControl>
-                        </StackPanel>
-                    </DataTemplate>
-                </ItemsControl.ItemTemplate>
-            </ItemsControl>
-        </ScrollViewer>
+            <ListBox.ItemTemplate>
+                <DataTemplate>
+                    <materialDesign:Card Width="224" Margin="6"
+                                        Padding="0"
+                                        UniformCornerRadius="0"
+                                        Cursor="Hand"
+                                        UseLayoutRounding="True">
+                        <materialDesign:Card.Style>
+                            <Style TargetType="materialDesign:Card">
+                                <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2" />
+                                <Setter Property="BorderThickness" Value="0" />
+                                <Setter Property="Opacity" Value="0.95" />
+                                <Setter Property="Padding" Value="0" />
+                                <Style.Triggers>
+                                    <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                 Value="True">
+                                        <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp8" />
+                                        <Setter Property="Opacity" Value="1" />
+                                    </DataTrigger>
+                                </Style.Triggers>
+                            </Style>
+                        </materialDesign:Card.Style>
+
+                        <materialDesign:Card.InputBindings>
+                            <MouseBinding MouseAction="LeftDoubleClick"
+                                        Command="{Binding DataContext.OpenPhotoFileCommand,
+                                                            RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                        CommandParameter="{Binding}" />
+                        </materialDesign:Card.InputBindings>
+                        <Grid>
+                            <StackPanel>
+                                <Border Height="126"
+                                        Background="#2A2A2A"
+                                        ClipToBounds="True">
+                                    <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
+                                        Stretch="Uniform" />
+                                </Border>
+                                <StackPanel Margin="10,6,10,8">
+                                    <TextBlock Text="{Binding TakenAtDisplay}"
+                                            FontSize="12" />
+                                </StackPanel>
+                            </StackPanel>
+                            <Border IsHitTestVisible="False">
+                                <Border.Style>
+                                    <Style TargetType="Border">
+                                        <Setter Property="BorderThickness" Value="2" />
+                                        <Setter Property="BorderBrush" Value="Transparent" />
+                                        <Style.Triggers>
+                                            <DataTrigger Binding="{Binding IsSelected, RelativeSource={RelativeSource AncestorType=ListBoxItem}}"
+                                                         Value="True">
+                                                <Setter Property="BorderBrush" Value="{DynamicResource PrimaryHueLightBrush}" />
+                                            </DataTrigger>
+                                        </Style.Triggers>
+                                    </Style>
+                                </Border.Style>
+                            </Border>
+                        </Grid>
+                    </materialDesign:Card>
+                </DataTemplate>
+            </ListBox.ItemTemplate>
+        </ListBox>
     </Grid>
 </UserControl>

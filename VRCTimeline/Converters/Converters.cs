@@ -1,4 +1,3 @@
-using System.Collections.Concurrent;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -18,18 +17,31 @@ public class PathToThumbnailConverter : IValueConverter
     /// <summary>
     /// パス → Frozen サムネイル(BitmapImage または CroppedBitmap)のキャッシュ。
     /// 値はすべて Freeze 済みなのでスレッド間で共有しても安全。
-    /// DecodePixelWidth=224 の縮小版なので 1 枚あたり 100KB 前後、数千枚規模なら数百 MB で収まる想定。
-    /// 上限は設けない: 写真は通常ライブラリで増減が緩やかなため LRU 化の必要性は低く、
-    /// 必要になった時点で PhotoWatcher の削除イベントと連動して個別 Remove する余地を残している。
+    /// DecodePixelWidth=224 の縮小版なので 1 枚あたり 100KB 前後。
+    /// メモリ使用量を抑えるため容量上限 <see cref="CacheCapacity"/> 件の LRU として運用し、
+    /// 上限超過時は最も古いエントリから順に破棄する。
+    /// Window Hide 等のタイミングで <see cref="ClearCache"/> を呼び出すと全件破棄できる。
     /// </summary>
-    private static readonly ConcurrentDictionary<string, BitmapSource> _cache = new();
+    private const int CacheCapacity = 500;
+
+    private static readonly LinkedList<KeyValuePair<string, BitmapSource>> _lruList = new();
+    private static readonly Dictionary<string, LinkedListNode<KeyValuePair<string, BitmapSource>>> _cache = new();
+    private static readonly object _lock = new();
 
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not string path || !File.Exists(path)) return null;
 
-        if (_cache.TryGetValue(path, out var cached))
-            return cached;
+        lock (_lock)
+        {
+            if (_cache.TryGetValue(path, out var node))
+            {
+                // ヒット: 最近使用としてリスト先頭へ移動
+                _lruList.Remove(node);
+                _lruList.AddFirst(node);
+                return node.Value.Value;
+            }
+        }
 
         try
         {
@@ -63,7 +75,31 @@ public class PathToThumbnailConverter : IValueConverter
                 }
             }
 
-            _cache[path] = result;
+            lock (_lock)
+            {
+                // デコード中に別スレッドが同じパスを追加していた場合に備えて再チェック
+                if (_cache.TryGetValue(path, out var existing))
+                {
+                    _lruList.Remove(existing);
+                    _lruList.AddFirst(existing);
+                    return existing.Value.Value;
+                }
+
+                var node = new LinkedListNode<KeyValuePair<string, BitmapSource>>(
+                    new KeyValuePair<string, BitmapSource>(path, result));
+                _lruList.AddFirst(node);
+                _cache[path] = node;
+
+                // 容量超過時は最も古いエントリ(末尾)を破棄
+                while (_cache.Count > CacheCapacity)
+                {
+                    var oldest = _lruList.Last;
+                    if (oldest is null) break;
+                    _lruList.RemoveLast();
+                    _cache.Remove(oldest.Value.Key);
+                }
+            }
+
             return result;
         }
         catch
@@ -74,6 +110,18 @@ public class PathToThumbnailConverter : IValueConverter
 
     public object ConvertBack(object value, Type targetType, object parameter, CultureInfo culture)
         => throw new NotSupportedException();
+
+    /// <summary>
+    /// サムネイルキャッシュを全件破棄する。Window Hide 等のタイミングで呼び出す想定。
+    /// </summary>
+    public static void ClearCache()
+    {
+        lock (_lock)
+        {
+            _cache.Clear();
+            _lruList.Clear();
+        }
+    }
 }
 
 /// <summary>LogEntryType を色付き SolidColorBrush に変換するコンバーター</summary>
