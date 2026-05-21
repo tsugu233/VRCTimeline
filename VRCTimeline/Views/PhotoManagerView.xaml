@@ -19,8 +19,7 @@
             FilterDateTo="{Binding FilterDateTo}"
             PlayerFilterText="{Binding PlayerFilter}"
             WorldFilterText="{Binding WorldFilter}"
-            SearchCommand="{Binding LoadPhotosCommand}"
-            ShowProgressBar="{Binding IsLoading}" />
+            SearchCommand="{Binding LoadPhotosCommand}" />
 
         <!-- Status -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
@@ -151,7 +150,8 @@
                    Opacity="0.5" />
 
         <!-- Photo Gallery (grouped) -->
-        <ScrollViewer Grid.Row="3" VerticalScrollBarVisibility="Auto"
+        <ScrollViewer x:Name="PhotoScrollViewer"
+                      Grid.Row="3" VerticalScrollBarVisibility="Auto"
                       HorizontalScrollBarVisibility="Disabled"
                       PreviewMouseWheel="PhotoScrollViewer_PreviewMouseWheel"
                       Visibility="{Binding HasNoPhotos, Converter={StaticResource InverseBoolToVis}}">
@@ -185,48 +185,78 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <materialDesign:Card Width="210" Margin="6"
-                                                             materialDesign:ElevationAssist.Elevation="Dp2"
-                                                             Cursor="Hand">
+                                        <materialDesign:Card Width="224" Margin="6"
+                                                            Padding="0"
+                                                            UniformCornerRadius="0"
+                                                            materialDesign:ElevationAssist.Elevation="Dp2"
+                                                            Cursor="Hand"
+                                                            UseLayoutRounding="True">
                                             <materialDesign:Card.Style>
                                                 <Style TargetType="materialDesign:Card">
                                                     <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp2" />
-                                                    <Setter Property="BorderThickness" Value="2" />
-                                                    <Setter Property="BorderBrush" Value="Transparent" /> <Setter Property="Opacity" Value="0.95" /> <Style.Triggers>
+                                                    <Setter Property="BorderThickness" Value="0" />
+                                                    <Setter Property="Opacity" Value="0.95" />
+                                                    <Setter Property="Padding" Value="0" />
+                                                    <Style.Triggers>
                                                         <DataTrigger Value="True">
                                                             <DataTrigger.Binding>
                                                                 <MultiBinding Converter="{StaticResource EqualityMulti}">
                                                                     <Binding />
                                                                     <Binding Path="DataContext.SelectedPhoto"
-                                                                             RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                                            RelativeSource="{RelativeSource AncestorType=UserControl}" />
                                                                 </MultiBinding>
                                                             </DataTrigger.Binding>
                                                             <Setter Property="materialDesign:ElevationAssist.Elevation" Value="Dp8" />
-                                                            <Setter Property="Opacity" Value="1" /> <Setter Property="BorderBrush" Value="{DynamicResource PrimaryHueLightBrush}" />
+                                                            <Setter Property="Opacity" Value="1" />
                                                         </DataTrigger>
                                                     </Style.Triggers>
                                                 </Style>
                                             </materialDesign:Card.Style>
+                                            
                                             <materialDesign:Card.InputBindings>
                                                 <MouseBinding MouseAction="LeftClick"
-                                                              Command="{Binding DataContext.SelectPhotoCommand,
-                                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                              CommandParameter="{Binding}" />
+                                                            Command="{Binding DataContext.SelectPhotoCommand,
+                                                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}" />
                                                 <MouseBinding MouseAction="LeftDoubleClick"
-                                                              Command="{Binding DataContext.OpenPhotoFileCommand,
-                                                                          RelativeSource={RelativeSource AncestorType=UserControl}}"
-                                                              CommandParameter="{Binding}" />
+                                                            Command="{Binding DataContext.OpenPhotoFileCommand,
+                                                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                            CommandParameter="{Binding}" />
                                             </materialDesign:Card.InputBindings>
-                                            <StackPanel>
-                                                <Border Height="150" Background="#2A2A2A">
-                                                    <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
-                                                           Stretch="UniformToFill" />
-                                                </Border>
-                                                <StackPanel Margin="10,6,10,8">
-                                                    <TextBlock Text="{Binding TakenAtDisplay}"
-                                                               FontSize="12" />
+                                            <Grid>
+                                                <StackPanel>
+                                                    <Border Height="126"
+                                                            Background="#2A2A2A"
+                                                            ClipToBounds="True">
+                                                        <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
+                                                            Stretch="Uniform" />
+                                                    </Border>
+                                                    <StackPanel Margin="10,6,10,8">
+                                                        <TextBlock Text="{Binding TakenAtDisplay}"
+                                                                FontSize="12" />
+                                                    </StackPanel>
                                                 </StackPanel>
-                                            </StackPanel>
+                                                <Border IsHitTestVisible="False">
+                                                    <Border.Style>
+                                                        <Style TargetType="Border">
+                                                            <Setter Property="BorderThickness" Value="2" />
+                                                            <Setter Property="BorderBrush" Value="Transparent" /> 
+                                                            <Style.Triggers>
+                                                                <DataTrigger Value="True">
+                                                                    <DataTrigger.Binding>
+                                                                        <MultiBinding Converter="{StaticResource EqualityMulti}">
+                                                                            <Binding />
+                                                                            <Binding Path="DataContext.SelectedPhoto"
+                                                                                    RelativeSource="{RelativeSource AncestorType=UserControl}" />
+                                                                        </MultiBinding>
+                                                                    </DataTrigger.Binding>
+                                                                    <Setter Property="BorderBrush" Value="{DynamicResource PrimaryHueLightBrush}" />
+                                                                </DataTrigger>
+                                                            </Style.Triggers>
+                                                        </Style>
+                                                    </Border.Style>
+                                                </Border>
+                                            </Grid>
                                         </materialDesign:Card>
                                     </DataTemplate>
                                 </ItemsControl.ItemTemplate>

@@ -27,6 +27,9 @@
     <sys:String x:Key="Photo_OpenFolder">Open Folder</sys:String>
     <sys:String x:Key="Photo_JoinedPlayers">Players</sys:String>
     <sys:String x:Key="Photo_NoPhotos">No Photos Found</sys:String>
+    <sys:String x:Key="Photo_Viewer_Previous">Previous</sys:String>
+    <sys:String x:Key="Photo_Viewer_Next">Next</sys:String>
+    <sys:String x:Key="Photo_Viewer_Close">Close</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">Directory Settings</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChat Log Folder</sys:String>
@@ -47,11 +50,11 @@
     <sys:String x:Key="Settings_ImportDescription">Import world visit history and player encounter data from the database.&#x0a;Please select "VRChatActivityLog.db".</sys:String>
     <sys:String x:Key="Settings_ImportButton">Import Data</sys:String>
     <sys:String x:Key="Settings_ThumbnailCache">Thumbnail Cache</sys:String>
-    <sys:String x:Key="Settings_ThumbnailCacheDescription">You can delete the video thumbnail cache folder.&#x0a;Entries beyond the 50 most recent are deleted automatically.</sys:String>
+    <sys:String x:Key="Settings_ThumbnailCacheDescription" xml:space="preserve">You can delete the video thumbnail cache folder.&#x0a;Entries beyond the 50 most recent are deleted automatically.</sys:String>
     <sys:String x:Key="Settings_ClearCache">Clear Cache</sys:String>
     <sys:String x:Key="Settings_OpenFolder">Open Folder</sys:String>
     <sys:String x:Key="Settings_PCMigration">PC Migration</sys:String>
-    <sys:String x:Key="Settings_PCMigrationDescription">Opens the database storage folder.&#x0a;When migrating PCs, copy "vrchat_activity.db" to the same folder on the new PC.</sys:String>
+    <sys:String x:Key="Settings_PCMigrationDescription" xml:space="preserve">Opens the database storage folder.&#x0a;When migrating PCs, copy "vrchat_activity.db" to the same folder on the new PC.</sys:String>
     <!-- DataGrid Columns -->
     <sys:String x:Key="Col_DateTime">Date/Time</sys:String>
     <sys:String x:Key="Col_WorldName">World Name</sys:String>
@@ -84,6 +87,7 @@
     <sys:String x:Key="Str_StayingInWorld">Staying</sys:String>
     <sys:String x:Key="Confirm_Rejoin">Rejoin "{0}"?</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">No photos found for this visit.</sys:String>
+    <sys:String x:Key="OpenError_ExternalAppFailed">The photo viewer failed to launch.&#x0a;Please check your default app settings.</sys:String>
     <sys:String x:Key="Info_NoActivityForPhoto">No matching activity found.</sys:String>
     <sys:String x:Key="Str_PhotoCount">Showing {0} photos</sys:String>
     <!-- C# / Dialog strings -->
@@ -106,4 +110,8 @@
     <sys:String x:Key="Str_TrayExit">Exit</sys:String>
     <sys:String x:Key="Str_SettingsCorruptedTitle">Failed to load settings</sys:String>
     <sys:String x:Key="Str_SettingsCorruptedMessage">The settings file was corrupted and the application started with default values.\nA backup of the corrupted file has been saved here:\n{0}</sys:String>
+    <sys:String x:Key="Str_SettingsLockedTitle">Failed to load settings</sys:String>
+    <sys:String x:Key="Str_SettingsLockedMessage">The settings file could not be accessed, so automatic saving has been disabled for this session.\n(to protect the existing settings file)\n\nRestart the application to resume normal operation. If the problem persists, check whether the file is locked by another process.</sys:String>
+    <sys:String x:Key="Str_DbErrorTitle">Database write error</sys:String>
+    <sys:String x:Key="Str_DbErrorMessage">An error occurred while writing to the database. Recent records may not have been saved.</sys:String>
 </ResourceDictionary>

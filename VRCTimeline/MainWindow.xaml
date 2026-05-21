@@ -110,7 +110,13 @@
                           ShowsPreview="False" />
 
             <!-- Content Area -->
-            <ContentControl Grid.Column="2" Content="{Binding CurrentViewModel}" Margin="16" />
+            <!--
+                Content は MainWindow.xaml.cs 側で MainViewModel.CurrentViewModel の変更を購読し、
+                キャッシュ済み View インスタンスを差し替える形で更新する。
+                ContentControl + Content バインドだと DataTemplate 経由で毎回 View が再生成され、
+                サイドメニュー切替時の体感が悪化するため、View インスタンスを使い回す方式に変更している。
+            -->
+            <ContentControl x:Name="ContentRoot" Grid.Column="2" Margin="16" />
         </Grid>
     </DockPanel>
 
@@ -137,6 +143,21 @@
                 <TextBlock Text="{Binding Loading.LoadingMessage}"
                            Style="{StaticResource MaterialDesignSubtitle1TextBlock}"
                            HorizontalAlignment="Center" />
+                <TextBlock Text="{Binding Loading.LoadingSubMessage}"
+                           HorizontalAlignment="Center"
+                           FontSize="12" Opacity="0.6"
+                           Margin="0,6,0,0">
+                    <TextBlock.Style>
+                        <Style TargetType="TextBlock">
+                            <Setter Property="Visibility" Value="Visible" />
+                            <Style.Triggers>
+                                <DataTrigger Binding="{Binding Loading.LoadingSubMessage}" Value="">
+                                    <Setter Property="Visibility" Value="Collapsed" />
+                                </DataTrigger>
+                            </Style.Triggers>
+                        </Style>
+                    </TextBlock.Style>
+                </TextBlock>
             </StackPanel>
         </materialDesign:Card>
     </Border>

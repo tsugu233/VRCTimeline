@@ -2,6 +2,7 @@ using System.Net.Http;
 using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
+using System.Web;
 
 namespace VRCTimeline.Services;
 
@@ -11,8 +12,12 @@ namespace VRCTimeline.Services;
 /// </summary>
 public class VideoInfoService
 {
-    /// <summary>HTTP クライアント（アプリケーション全体で共有）</summary>
-    private static readonly HttpClient Http = new();
+    /// <summary>
+    /// HTTP クライアント（アプリケーション全体で共有）。
+    /// noembed.com 応答遅延が RateLimiter (Semaphore(1,1)) で直列化された後続フェッチを
+    /// ブロックし続けるのを防ぐため、既定 100 秒ではなく短いタイムアウトを設定する。
+    /// </summary>
+    private static readonly HttpClient Http = new() { Timeout = TimeSpan.FromSeconds(15) };
 
     /// <summary>API レート制限用セマフォ（同時リクエスト数: 1）</summary>
     private static readonly SemaphoreSlim RateLimiter = new(1, 1);
@@ -26,6 +31,32 @@ public class VideoInfoService
     public static bool IsYouTubeUrl(string url) =>
         url.Contains("youtube.com", StringComparison.OrdinalIgnoreCase)
         || url.Contains("youtu.be", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// nextnex 等のラッパー URL を実際の YouTube URL にアンラップする。
+    /// クエリパラメータ "url" の値が YouTube URL であればそれを返し、
+    /// それ以外は入力をそのまま返す。
+    /// 例: https://nextnex.com/?url=https://www.youtube.com/watch?v=xxx
+    ///     → https://www.youtube.com/watch?v=xxx
+    /// </summary>
+    public static string UnwrapVideoUrl(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return url;
+        if (string.IsNullOrEmpty(uri.Query)) return url;
+
+        try
+        {
+            var inner = HttpUtility.ParseQueryString(uri.Query)["url"];
+            if (!string.IsNullOrEmpty(inner) && IsYouTubeUrl(inner))
+                return inner;
+        }
+        catch
+        {
+            // クエリ解析に失敗した場合は元の URL をそのまま使う（保存をブロックしない）
+        }
+        return url;
+    }
 
     /// <summary>
     /// 動画 URL からタイトルとサムネイルを取得する。
@@ -63,8 +94,11 @@ public class VideoInfoService
 
             return (title, localPath);
         }
-        catch
+        catch (Exception ex)
         {
+            // noembed.com 応答エラー・タイムアウト・JSON パース失敗等。
+            // 呼び出し元には null を返し続け、診断のため AppLogger に記録する。
+            AppLogger.LogError(ex);
             return (null, null);
         }
         finally
@@ -89,7 +123,7 @@ public class VideoInfoService
         {
             if (!pathsToKeep.Contains(file))
             {
-                try { File.Delete(file); } catch { }
+                try { File.Delete(file); } catch { /* キャッシュ削除はベストエフォート（次回起動時に再試行） */ }
             }
         }
     }

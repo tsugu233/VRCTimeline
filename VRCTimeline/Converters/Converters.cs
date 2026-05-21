@@ -1,3 +1,4 @@
+using System.Collections.Concurrent;
 using System.Globalization;
 using System.Windows;
 using System.Windows.Data;
@@ -7,23 +8,63 @@ using VRCTimeline.Models;
 
 namespace VRCTimeline.Converters;
 
-/// <summary>ファイルパスから縮小サイズの BitmapImage に変換するコンバーター</summary>
+/// <summary>
+/// ファイルパスから縮小サイズの BitmapSource に変換するコンバーター。
+/// 同じパスに対する 2 回目以降の呼び出しはキャッシュから即時に Frozen な BitmapSource を返すため、
+/// サムネイル一覧のスクロール・画面切替後の再表示で BitmapImage の再デコードを起こさない。
+/// </summary>
 public class PathToThumbnailConverter : IValueConverter
 {
+    /// <summary>
+    /// パス → Frozen サムネイル(BitmapImage または CroppedBitmap)のキャッシュ。
+    /// 値はすべて Freeze 済みなのでスレッド間で共有しても安全。
+    /// DecodePixelWidth=224 の縮小版なので 1 枚あたり 100KB 前後、数千枚規模なら数百 MB で収まる想定。
+    /// 上限は設けない: 写真は通常ライブラリで増減が緩やかなため LRU 化の必要性は低く、
+    /// 必要になった時点で PhotoWatcher の削除イベントと連動して個別 Remove する余地を残している。
+    /// </summary>
+    private static readonly ConcurrentDictionary<string, BitmapSource> _cache = new();
+
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not string path || !File.Exists(path)) return null;
+
+        if (_cache.TryGetValue(path, out var cached))
+            return cached;
 
         try
         {
             var bitmap = new BitmapImage();
             bitmap.BeginInit();
             bitmap.UriSource = new Uri(path);
-            bitmap.DecodePixelWidth = 200;
+            bitmap.DecodePixelWidth = 224;
             bitmap.CacheOption = BitmapCacheOption.OnLoad;
             bitmap.EndInit();
             bitmap.Freeze();
-            return bitmap;
+
+            BitmapSource result = bitmap;
+
+            // VRChat 印刷モード写真(2048×1440 ≈ 1.42:1)はフッター枠付き。
+            // 黒い写真領域を囲むように、上寄せで 16:9 に切り出して返す。
+            var w = bitmap.PixelWidth;
+            var h = bitmap.PixelHeight;
+            if (w > 0 && h > 0)
+            {
+                var ratio = (double)w / h;
+                if (ratio >= 1.40 && ratio <= 1.45)
+                {
+                    var cropHeight = (int)Math.Round(w * 9.0 / 16.0);
+                    var yOffset = Math.Max(0, (int)Math.Round(h * 0.02));
+                    if (cropHeight > 0 && yOffset + cropHeight <= h)
+                    {
+                        var cropped = new CroppedBitmap(bitmap, new Int32Rect(0, yOffset, w, cropHeight));
+                        cropped.Freeze();
+                        result = cropped;
+                    }
+                }
+            }
+
+            _cache[path] = result;
+            return result;
         }
         catch
         {

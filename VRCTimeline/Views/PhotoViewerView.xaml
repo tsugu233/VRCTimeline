@@ -1,0 +1,181 @@
+<UserControl x:Class="VRCTimeline.Views.PhotoViewerView"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             Focusable="True"
+             Loaded="OnLoaded"
+             KeyDown="OnKeyDown"
+             Background="{DynamicResource MaterialDesignPaper}"
+             MinWidth="320" MinHeight="240">
+    <UserControl.Resources>
+        <!--
+            ホバー中のみフェードインする共通スタイル群。
+            RootGrid.IsMouseOver=True で表示、False で非表示にフェードする。
+            目標 Opacity は派生スタイル側で上書きできるよう Storyboard には書かず、
+            ナビボタン/閉じるボタン/情報バーで個別に派生スタイルを定義する。
+        -->
+        <Duration x:Key="HoverFadeInDuration">0:0:0.15</Duration>
+        <Duration x:Key="HoverFadeOutDuration">0:0:0.4</Duration>
+
+        <!-- 情報バー用: 表示時 Opacity=1.0 -->
+        <Style x:Key="HoverFadeStyle" TargetType="FrameworkElement">
+            <Setter Property="Opacity" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, ElementName=RootGrid}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="1.0"
+                                                 Duration="{StaticResource HoverFadeInDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0"
+                                                 Duration="{StaticResource HoverFadeOutDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- ナビボタン用: 表示時 Opacity=0.45（控えめに透過） -->
+        <Style x:Key="HoverFadeNavButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource MaterialDesignFloatingActionMiniLightButton}">
+            <Setter Property="Opacity" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, ElementName=RootGrid}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0.45"
+                                                 Duration="{StaticResource HoverFadeInDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0"
+                                                 Duration="{StaticResource HoverFadeOutDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+
+        <!-- 閉じるボタン用: 表示時 Opacity=0.85（はっきり見える） -->
+        <Style x:Key="HoverFadeCloseButtonStyle" TargetType="Button"
+               BasedOn="{StaticResource MaterialDesignIconButton}">
+            <Setter Property="Opacity" Value="0" />
+            <Style.Triggers>
+                <DataTrigger Binding="{Binding IsMouseOver, ElementName=RootGrid}" Value="True">
+                    <DataTrigger.EnterActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0.85"
+                                                 Duration="{StaticResource HoverFadeInDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.EnterActions>
+                    <DataTrigger.ExitActions>
+                        <BeginStoryboard>
+                            <Storyboard>
+                                <DoubleAnimation Storyboard.TargetProperty="Opacity"
+                                                 To="0"
+                                                 Duration="{StaticResource HoverFadeOutDuration}" />
+                            </Storyboard>
+                        </BeginStoryboard>
+                    </DataTrigger.ExitActions>
+                </DataTrigger>
+            </Style.Triggers>
+        </Style>
+    </UserControl.Resources>
+
+    <Grid x:Name="RootGrid">
+        <!-- Image area -->
+        <Border x:Name="ImageHost"
+                Background="#000000"
+                ClipToBounds="True"
+                MouseWheel="OnMouseWheel"
+                MouseLeftButtonDown="OnMouseLeftButtonDown"
+                MouseLeftButtonUp="OnMouseLeftButtonUp"
+                MouseMove="OnMouseMove">
+            <Image x:Name="MainImage"
+                   Source="{Binding CurrentImageSource}"
+                   Stretch="Uniform"
+                   RenderOptions.BitmapScalingMode="HighQuality">
+                <Image.RenderTransformOrigin>
+                    <Point X="0.5" Y="0.5" />
+                </Image.RenderTransformOrigin>
+                <Image.RenderTransform>
+                    <TransformGroup>
+                        <ScaleTransform ScaleX="{Binding Zoom}" ScaleY="{Binding Zoom}" />
+                        <TranslateTransform X="{Binding OffsetX}" Y="{Binding OffsetY}" />
+                    </TransformGroup>
+                </Image.RenderTransform>
+            </Image>
+        </Border>
+
+        <!-- Previous button -->
+        <Button HorizontalAlignment="Left" VerticalAlignment="Center"
+                Margin="16,0,0,0"
+                Width="56" Height="56"
+                Style="{StaticResource HoverFadeNavButtonStyle}"
+                Command="{Binding PreviousCommand}"
+                ToolTip="{DynamicResource Photo_Viewer_Previous}"
+                AutomationProperties.Name="{DynamicResource Photo_Viewer_Previous}">
+            <materialDesign:PackIcon Kind="ChevronLeft" Width="32" Height="32" />
+        </Button>
+
+        <!-- Next button -->
+        <Button HorizontalAlignment="Right" VerticalAlignment="Center"
+                Margin="0,0,16,0"
+                Width="56" Height="56"
+                Style="{StaticResource HoverFadeNavButtonStyle}"
+                Command="{Binding NextCommand}"
+                ToolTip="{DynamicResource Photo_Viewer_Next}"
+                AutomationProperties.Name="{DynamicResource Photo_Viewer_Next}">
+            <materialDesign:PackIcon Kind="ChevronRight" Width="32" Height="32" />
+        </Button>
+
+        <!-- Close button -->
+        <Button HorizontalAlignment="Right" VerticalAlignment="Top"
+                Margin="0,12,12,0"
+                Width="40" Height="40"
+                Style="{StaticResource HoverFadeCloseButtonStyle}"
+                Command="{x:Static materialDesign:DialogHost.CloseDialogCommand}"
+                ToolTip="{DynamicResource Photo_Viewer_Close}"
+                AutomationProperties.Name="{DynamicResource Photo_Viewer_Close}"
+                Foreground="{DynamicResource MaterialDesignBody}">
+            <materialDesign:PackIcon Kind="Close" Width="24" Height="24" />
+        </Button>
+
+        <!-- Bottom info bar -->
+        <Border HorizontalAlignment="Center" VerticalAlignment="Bottom"
+                Margin="0,0,0,16"
+                Padding="14,6"
+                CornerRadius="14"
+                Background="#80000000"
+                IsHitTestVisible="False"
+                Style="{StaticResource HoverFadeStyle}">
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding CurrentPhoto.TakenAtDisplay}"
+                           Foreground="White" FontSize="12" />
+                <TextBlock Text="{Binding CurrentPhoto.WorldName}"
+                           Foreground="White" FontSize="12" Opacity="0.7"
+                           Margin="14,0,0,0" />
+            </StackPanel>
+        </Border>
+
+    </Grid>
+</UserControl>

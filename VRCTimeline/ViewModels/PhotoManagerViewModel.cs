@@ -1,14 +1,17 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
+using System.Windows.Threading;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using MaterialDesignThemes.Wpf;
 using Microsoft.EntityFrameworkCore;
 using VRCTimeline.Data;
 using VRCTimeline.Helpers;
 using VRCTimeline.Models;
 using VRCTimeline.Services;
 using VRCTimeline.Services.LogParser;
+using VRCTimeline.Views;
 
 namespace VRCTimeline.ViewModels;
 
@@ -18,7 +21,7 @@ namespace VRCTimeline.ViewModels;
 /// プレイヤー・ワールド名でフィルタリングする。
 /// PhotoWatcher からのリアルタイム通知にも対応する。
 /// </summary>
-public partial class PhotoManagerViewModel : ObservableObject
+public partial class PhotoManagerViewModel : ObservableObject, IDisposable
 {
     private readonly SettingsService _settingsService;
     private readonly LoadingService _loading;
@@ -32,14 +35,35 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>初回ロード時の取得件数制限フラグ</summary>
     private bool _isInitialLoad;
 
+    /// <summary>
+    /// DB メンテナンス（孤立写真の紐づけ修復・存在しないファイルのレコード削除）を
+    /// このセッションで既に実施したかどうか。
+    /// PhotoRecord 全行ロード + File.Exists の重コストをフィルタ変更ごとに繰り返さないため、
+    /// 起動後 1 回（および ReloadAsync 経由のデータ再構築時）だけ走らせる。
+    /// </summary>
+    private bool _maintenanceDone;
+
+    /// <summary>FilterDateTo を「今日」に追従させるかどうか（日付またぎ時の自動更新用）</summary>
+    private bool _filterDateToFollowsToday = true;
+
+    /// <summary>日付またぎを検知して FilterDateTo を更新するためのウォッチャー</summary>
+    private readonly DayChangeWatcher _dayChangeWatcher;
+
     /// <summary>特定ワールド訪問IDでフィルタリングする場合に使用（アクティビティ画面からの遷移用）</summary>
     private int? _filterWorldVisitId;
 
     /// <summary>訪問フィルター時のワールド名（写真選択前のデフォルト表示用）</summary>
     private string _currentVisitWorldName = "";
 
-    /// <summary>訪問フィルター時の滞在時間範囲（写真選択前のデフォルト表示用）</summary>
-    private string _currentVisitTimeRange = "";
+    /// <summary>
+    /// 訪問フィルター時のワールド入室日時（写真選択前のデフォルト表示用）。
+    /// フォーマット済み文字列ではなく DateTime のまま保持することで、
+    /// 言語切替時に再フォーマットしても曜日略称等が現在のカルチャで表示できる。
+    /// </summary>
+    private DateTime? _currentVisitJoinedAt;
+
+    /// <summary>訪問フィルター時のワールド退室日時（同上の理由で DateTime のまま保持）</summary>
+    private DateTime? _currentVisitLeftAt;
 
     /// <summary>訪問フィルター時のプレイヤーリスト（写真選択前のデフォルト表示用）</summary>
     private List<PlayerDisplay> _currentVisitPlayers = [];
@@ -57,13 +81,19 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// </summary>
     private string? _searchPlayerUserId;
 
+    /// <summary>
+    /// 画面遷移時に PlayerFilter / WorldFilter をクリアする際、各 partial ハンドラ内の
+    /// 自動リロード（LoadPhotosCommand.Execute）を一時的に抑止するためのフラグ。
+    /// </summary>
+    private bool _suppressFilterAutoReload;
+
     /// <summary>表示期間の開始日（デフォルト: 30日前）</summary>
     [ObservableProperty]
     private DateTime _filterDateFrom = DateTime.Today.AddDays(-30);
 
-    /// <summary>表示期間の終了日</summary>
+    /// <summary>表示期間の終了日（選択日を含む）</summary>
     [ObservableProperty]
-    private DateTime _filterDateTo = DateTime.Today.AddDays(1);
+    private DateTime _filterDateTo = DateTime.Today;
 
     /// <summary>プレイヤー名フィルターテキスト</summary>
     [ObservableProperty]
@@ -72,10 +102,6 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>ワールド名フィルターテキスト</summary>
     [ObservableProperty]
     private string? _worldFilter;
-
-    /// <summary>データ読み込み中フラグ</summary>
-    [ObservableProperty]
-    private bool _isLoading;
 
     /// <summary>ステータスバーに表示するテキスト</summary>
     [ObservableProperty]
@@ -120,8 +146,20 @@ public partial class PhotoManagerViewModel : ObservableObject
     /// <summary>選択写真 or 訪問フィルターのワールド名</summary>
     public string SelectedPhotoWorldName => SelectedPhoto?.WorldName ?? _currentVisitWorldName;
 
-    /// <summary>選択写真 or 訪問フィルターの滞在時間範囲</summary>
-    public string SelectedPhotoTimeRange => SelectedPhoto?.WorldTimeRange ?? _currentVisitTimeRange;
+    /// <summary>
+    /// 選択写真 or 訪問フィルターの滞在時間範囲。
+    /// 都度フォーマットするため、言語切替で OnPropertyChanged を発火すれば現在のカルチャで再表示される。
+    /// </summary>
+    public string SelectedPhotoTimeRange => SelectedPhoto?.WorldTimeRange ?? CurrentVisitTimeRangeFormatted;
+
+    /// <summary>
+    /// 訪問フィルターコンテキストの時間範囲を現在のカルチャで整形する。
+    /// JoinedAt が null の場合（写真フィルター解除中）は空文字を返す。
+    /// </summary>
+    private string CurrentVisitTimeRangeFormatted =>
+        _currentVisitJoinedAt.HasValue
+            ? DateFormatHelper.FormatTimeRange(_currentVisitJoinedAt.Value, _currentVisitLeftAt)
+            : string.Empty;
 
     public PhotoManagerViewModel(
         SettingsService settingsService,
@@ -142,15 +180,36 @@ public partial class PhotoManagerViewModel : ObservableObject
 
         // 言語切替時にステータステキスト・日付範囲表示を再ローカライズする
         LocalizationService.LanguageChanged += OnLanguageChanged;
+
+        _dayChangeWatcher = new DayChangeWatcher(() =>
+        {
+            if (_filterDateToFollowsToday) FilterDateTo = DateTime.Today;
+        });
     }
 
-    /// <summary>言語切替時に表示テキストを現在のカルチャで再生成する</summary>
+    /// <summary>
+    /// 言語切替時に表示テキストを現在のカルチャで再生成する。
+    /// ViewModel 側プロパティ（ステータス、日付範囲テキスト、選択中時間範囲）の更新に加えて、
+    /// 各 PhotoGroup/PhotoDisplayItem の曜日付き表示プロパティも INPC 経由で再評価させる。
+    /// 再ロードは行わないので DB アクセスは発生しない。
+    /// </summary>
     private void OnLanguageChanged()
     {
         Application.Current?.Dispatcher.InvokeAsync(() =>
         {
             UpdateStatus();
             UpdateDateRangeText();
+
+            foreach (var group in PhotoGroups)
+            {
+                group.RefreshLocalizedStrings();
+                foreach (var photo in group.Photos)
+                    photo.RefreshLocalizedStrings();
+            }
+
+            // 訪問コンテキストの時間範囲は CurrentVisitTimeRangeFormatted 経由で都度フォーマットされるため、
+            // 選択写真側ではなくこちらの再評価通知だけで現在のカルチャに追従する。
+            OnPropertyChanged(nameof(SelectedPhotoTimeRange));
         });
     }
 
@@ -173,14 +232,22 @@ public partial class PhotoManagerViewModel : ObservableObject
     partial void OnPlayerFilterChanged(string? value)
     {
         _searchPlayerUserId = null;
+        if (_suppressFilterAutoReload) return;
         if (string.IsNullOrEmpty(value) && _initialized)
             LoadPhotosCommand.Execute(null);
     }
 
     partial void OnWorldFilterChanged(string? value)
     {
+        if (_suppressFilterAutoReload) return;
         if (string.IsNullOrEmpty(value) && _initialized)
             LoadPhotosCommand.Execute(null);
+    }
+
+    /// <summary>ユーザーが終了日を変更した際、その値が「今日」かどうかを記録する</summary>
+    partial void OnFilterDateToChanged(DateTime value)
+    {
+        _filterDateToFollowsToday = value.Date == DateTime.Today;
     }
 
     /// <summary>PhotoWatcher から新しい写真が追加された際にリアルタイムで一覧に反映する</summary>
@@ -234,12 +301,24 @@ public partial class PhotoManagerViewModel : ObservableObject
     public async Task ReloadAsync()
     {
         _initialized = true;
+        // データインポート等で DB が変化したのでメンテナンスを再実行する
+        _maintenanceDone = false;
         await LoadPhotosAsync();
     }
 
     /// <summary>特定ワールド訪問の写真のみを表示する（アクティビティ画面からの遷移用）</summary>
     public async Task FilterByWorldVisitId(int worldVisitId)
     {
+        // 「写真を表示」ボタン遷移時はプレイヤー名／ワールド名フィルターが残ったままだと、
+        // 後続でフィルター無効化したいケースで意図したデータが見えなくなる。
+        // 各 partial ハンドラの自動リロード経路は抑止フラグで止め、後段の訪問フィルター読み込みに一本化する。
+        _suppressFilterAutoReload = true;
+        try
+        {
+            PlayerFilter = null;
+            WorldFilter = null;
+        }
+        finally { _suppressFilterAutoReload = false; }
         _filterWorldVisitId = worldVisitId;
         _initialized = true;
         await LoadPhotosAsync();
@@ -262,7 +341,10 @@ public partial class PhotoManagerViewModel : ObservableObject
     private async void UpdatePlayerCards()
     {
         SelectedPhotoPlayers.Clear();
-        if (SelectedPhoto == null)
+
+        // await 前に対象写真を捕捉。await 中に選択が変わっても捕捉した写真に対して処理を完結させる。
+        var selected = SelectedPhoto;
+        if (selected == null)
         {
             // 写真未選択時は訪問フィルターのプレイヤーリストを表示
             foreach (var p in _currentVisitPlayers)
@@ -271,16 +353,16 @@ public partial class PhotoManagerViewModel : ObservableObject
         }
 
         // 遅延読み込み: 写真に紐づくプレイヤーをまだ取得していない場合
-        if (SelectedPhoto.WorldVisitId.HasValue && SelectedPhoto.Players.Count == 0)
+        if (selected.WorldVisitId.HasValue && selected.Players.Count == 0)
         {
             var selfName = await _selfPlayer.GetSelfPlayerNameAsync();
 
             await using var db = new AppDbContext();
             var players = await db.PlayerSessions
-                .Where(s => s.WorldVisitId == SelectedPhoto.WorldVisitId.Value)
+                .Where(s => s.WorldVisitId == selected.WorldVisitId.Value)
                 .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt })
                 .ToListAsync();
-            SelectedPhoto.Players = players
+            selected.Players = players
                 .Select(p => new PlayerDisplay
                 {
                     DisplayName = LogPatterns.CleanPlayerName(p.DisplayName),
@@ -295,7 +377,10 @@ public partial class PhotoManagerViewModel : ObservableObject
                 .ToList();
         }
 
-        foreach (var p in SelectedPhoto.Players)
+        // await 中に選択が変わっていた場合は古い結果で UI を上書きしない
+        if (!ReferenceEquals(SelectedPhoto, selected)) return;
+
+        foreach (var p in selected.Players)
             SelectedPhotoPlayers.Add(p);
     }
 
@@ -307,7 +392,6 @@ public partial class PhotoManagerViewModel : ObservableObject
     private async Task LoadPhotosAsync()
     {
         StatusText = "読み込み中...";
-        IsLoading = true;
         _loading.Show("写真を読み込み中...");
         try
         {
@@ -320,14 +404,23 @@ public partial class PhotoManagerViewModel : ObservableObject
             _filterWorldVisitId = null;
 
             var selfName = await _selfPlayer.GetSelfPlayerNameAsync();
+            var selfUserId = await _selfPlayer.GetSelfUserIdAsync();
+
+            var runMaintenance = !_maintenanceDone;
+            _maintenanceDone = true;
 
             var result = await Task.Run(async () =>
             {
                 await using var db = new AppDbContext();
 
-                // DB メンテナンス: 孤立写真の紐づけ修復・存在しないファイルの削除
-                await RelinkOrphanPhotosAsync(db);
-                await RemoveMissingPhotosAsync(db);
+                // DB メンテナンス: 孤立写真の紐づけ修復・存在しないファイルの削除。
+                // 全行ロード + File.Exists で大量写真ライブラリではコスト大なので、
+                // セッション初回 (もしくはデータ再構築直後) のみに限定する。
+                if (runMaintenance)
+                {
+                    await RelinkOrphanPhotosAsync(db);
+                    await RemoveMissingPhotosAsync(db);
+                }
 
                 var query = db.PhotoRecords
                     .Include(p => p.WorldVisit)
@@ -341,7 +434,7 @@ public partial class PhotoManagerViewModel : ObservableObject
                 }
                 else
                 {
-                    query = query.Where(p => p.TakenAt >= dateFrom && p.TakenAt < dateTo);
+                    query = query.Where(p => p.TakenAt >= dateFrom && p.TakenAt < dateTo.Date.AddDays(1));
                 }
 
                 var photos = await query
@@ -349,6 +442,12 @@ public partial class PhotoManagerViewModel : ObservableObject
                     .ToListAsync();
 
                 // ── フィルタリング ──
+                // プレイヤー検索は UserId ベースで同一人物（改名歴あり）も同じヒットとして扱う。
+                // カードクリック: searchPlayerUserId 直接利用。
+                // テキスト入力: 表示名にマッチするセッションの UserId を解決し、同 UserId の
+                // 全セッション（別の表示名で記録されたものも含む）をヒット対象にする。
+                // この resolvedUserIds は遭遇統計の集計でも再利用する。
+                HashSet<string>? resolvedUserIds = null;
                 if (!filterByVisit)
                 {
                     if (!string.IsNullOrWhiteSpace(worldFilter))
@@ -362,11 +461,32 @@ public partial class PhotoManagerViewModel : ObservableObject
                             .Select(p => p.WorldVisitId!.Value)
                             .Distinct()
                             .ToList();
-                        var matchingVisitIds = await db.PlayerSessions
+                        var sessionsInScope = await db.PlayerSessions
                             .Where(s => visitIds.Contains(s.WorldVisitId))
                             .ToListAsync();
-                        var filteredVisitIds = matchingVisitIds
-                            .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, playerFilter))
+
+                        if (!string.IsNullOrEmpty(searchPlayerUserId))
+                        {
+                            // カードクリック: UserId 直接照合
+                            resolvedUserIds = [searchPlayerUserId];
+                        }
+                        else
+                        {
+                            // テキスト入力: 表示名一致セッションの UserId を解決
+                            resolvedUserIds = sessionsInScope
+                                .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, playerFilter)
+                                            && !string.IsNullOrEmpty(s.UserId))
+                                .Select(s => s.UserId)
+                                .Distinct()
+                                .ToHashSet();
+                        }
+
+                        // カードクリック時 (searchPlayerUserId あり) でも、UserId が空のセッション
+                        // (旧 activity log インポート由来等) は DisplayName でフォールバックマッチさせる。
+                        var filteredVisitIds = sessionsInScope
+                            .Where(s =>
+                                (resolvedUserIds.Count > 0 && !string.IsNullOrEmpty(s.UserId) && resolvedUserIds.Contains(s.UserId))
+                                || (string.IsNullOrEmpty(s.UserId) && KanaHelper.ContainsKanaInsensitive(s.DisplayName, playerFilter)))
                             .Select(s => s.WorldVisitId)
                             .ToHashSet();
                         photos = photos.Where(p => p.WorldVisitId != null &&
@@ -408,8 +528,11 @@ public partial class PhotoManagerViewModel : ObservableObject
                     .ToList();
 
                 // ── 訪問フィルター時のプレイヤー情報取得 ──
+                // 時間範囲は文字列ではなく DateTime のまま返し、UI 側で都度フォーマットすることで
+                // 言語切替時の曜日略称の再評価を可能にする。
                 string visitWorldName = "";
-                string visitTimeRange = "";
+                DateTime? visitJoinedAt = null;
+                DateTime? visitLeftAt = null;
                 List<PlayerDisplay> visitPlayers = [];
 
                 if (filterByVisit && photos.Count > 0)
@@ -418,7 +541,8 @@ public partial class PhotoManagerViewModel : ObservableObject
                     if (visit != null)
                     {
                         visitWorldName = visit.WorldName;
-                        visitTimeRange = DateFormatHelper.FormatTimeRange(visit.JoinedAt, visit.LeftAt);
+                        visitJoinedAt = visit.JoinedAt;
+                        visitLeftAt = visit.LeftAt;
                     }
 
                     var rawPlayers = await db.PlayerSessions
@@ -440,49 +564,73 @@ public partial class PhotoManagerViewModel : ObservableObject
                         .ToList();
                 }
 
-                // ── 遭遇統計の集計（UserId ベース、なければ表示名マッチ） ──
+                // ── 遭遇統計の集計（全期間ライフタイム統計） ──
+                // 表示中の写真や訪問フィルタには影響されず、PlayerSessions 全体を対象に計算する。
+                // PlayerSessions を AsNoTracking で直接引いて先行クエリの tracker 状態の影響を排除する。
                 (bool Has, int Count, string TotalTime) summary = default;
                 bool hasPlayerSearch = !string.IsNullOrWhiteSpace(playerFilter);
                 if (hasPlayerSearch)
                 {
-                    var visibleVisitIds = photos
-                        .Where(p => p.WorldVisitId.HasValue)
-                        .Select(p => p.WorldVisitId!.Value)
-                        .Distinct()
+                    List<PlayerSession> matched;
+                    if (!string.IsNullOrEmpty(searchPlayerUserId))
+                    {
+                        // カードクリック: SQL で UserId 一致を直接引く
+                        var targetUserId = searchPlayerUserId;
+                        var byUserId = await db.PlayerSessions.AsNoTracking()
+                            .Where(s => s.UserId == targetUserId)
+                            .ToListAsync();
+
+                        // UserId が空のセッション (旧 activity log インポート由来等) は DisplayName でフォールバック。
+                        var fallbackName = playerFilter!.Trim();
+                        var emptyIdSessions = await db.PlayerSessions.AsNoTracking()
+                            .Where(s => s.UserId == "")
+                            .ToListAsync();
+                        var byName = emptyIdSessions
+                            .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, fallbackName))
+                            .ToList();
+                        matched = byUserId.Concat(byName).ToList();
+                    }
+                    else
+                    {
+                        // テキスト入力: 全期間データから名前一致セッションの UserId を解決し、
+                        // 同 UserId の全セッション（改名後含む）＋ UserId 空の名前一致をまとめてヒット対象にする。
+                        var search = playerFilter!.Trim();
+                        var allSessions = await db.PlayerSessions.AsNoTracking().ToListAsync();
+                        var summaryUserIds = allSessions
+                            .Where(s => !string.IsNullOrEmpty(s.UserId)
+                                        && KanaHelper.ContainsKanaInsensitive(s.DisplayName, search))
+                            .Select(s => s.UserId)
+                            .Distinct()
+                            .ToHashSet();
+                        matched = allSessions
+                            .Where(s =>
+                                (!string.IsNullOrEmpty(s.UserId) && summaryUserIds.Contains(s.UserId))
+                                || (string.IsNullOrEmpty(s.UserId) && KanaHelper.ContainsKanaInsensitive(s.DisplayName, search)))
+                            .ToList();
+                    }
+
+                    // 自分自身は「遭遇」ではないため集計から除外する。
+                    matched = matched
+                        .Where(s =>
+                            !(!string.IsNullOrEmpty(selfUserId) && s.UserId == selfUserId)
+                            && !(string.IsNullOrEmpty(s.UserId) && !string.IsNullOrEmpty(selfName) && s.DisplayName == selfName))
                         .ToList();
 
-                    if (visibleVisitIds.Count > 0)
-                    {
-                        List<PlayerSession> matched;
-                        if (!string.IsNullOrEmpty(searchPlayerUserId))
-                        {
-                            matched = await db.PlayerSessions
-                                .Where(s => visibleVisitIds.Contains(s.WorldVisitId)
-                                            && s.UserId == searchPlayerUserId)
-                                .ToListAsync();
-                        }
-                        else
-                        {
-                            var rawSessions = await db.PlayerSessions
-                                .Where(s => visibleVisitIds.Contains(s.WorldVisitId))
-                                .ToListAsync();
-                            matched = rawSessions
-                                .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, playerFilter!))
-                                .ToList();
-                        }
-
-                        var ts = TimeSpan.FromMinutes(
-                            (int)matched.Sum(s =>
-                                s.LeftAt != null ? (s.LeftAt.Value - s.JoinedAt).TotalMinutes : 0));
-                        summary = (
-                            matched.Count > 0,
-                            matched.Count,
-                            $"{(int)ts.TotalHours}:{ts.Minutes:D2}"
-                        );
-                    }
+                    // 合計分: int.MaxValue 分（約 4084 年）を超える非現実値で OverflowException を起こさないようクランプ。
+                    var totalMinutes = matched
+                        .Where(s => s.LeftAt != null)
+                        .Sum(s => (s.LeftAt!.Value - s.JoinedAt).TotalMinutes);
+                    var ts = TimeSpan.FromMinutes(Math.Min(totalMinutes, (double)int.MaxValue));
+                    // 同一インスタンスでの再入場は 1 遭遇として数えるため、訪問単位でユニーク化する。
+                    var encounterCount = matched.Select(s => s.WorldVisitId).Distinct().Count();
+                    summary = (
+                        matched.Count > 0,
+                        encounterCount,
+                        $"{(int)ts.TotalHours}:{ts.Minutes:D2}"
+                    );
                 }
 
-                return (photos, groups, filterByVisit, visitWorldName, visitTimeRange, visitPlayers, summary, hasPlayerSearch);
+                return (photos, groups, filterByVisit, visitWorldName, visitJoinedAt, visitLeftAt, visitPlayers, summary, hasPlayerSearch);
             });
 
             // ── UI 更新 ──
@@ -490,7 +638,8 @@ public partial class PhotoManagerViewModel : ObservableObject
             SelectedPhoto = null;
             _currentVisitPlayers = [];
             _currentVisitWorldName = "";
-            _currentVisitTimeRange = "";
+            _currentVisitJoinedAt = null;
+            _currentVisitLeftAt = null;
 
             // 遭遇統計の表示反映
             if (result.hasPlayerSearch)
@@ -515,8 +664,27 @@ public partial class PhotoManagerViewModel : ObservableObject
             }
             HasNoPhotos = false;
 
+            // 非仮想化 ItemsControl + WrapPanel のため、Add ごとに全写真分の Card ビジュアルが
+            // 同期生成され UI スレッドが詰まる。一括追加するとローディングオーバーレイの
+            // IsIndeterminate スピナーが UI スレッド駆動のため止まって見えるので、
+            // 一定枚数ごとに Dispatcher へ制御を返し描画フレームを進めさせる。
+            // 併せて LoadingService のサブメッセージで "処理済み / 全体" の進捗を表示する。
+            const int yieldEveryPhotos = 50;
+            int photosSinceYield = 0;
+            int processedPhotos = 0;
+            int totalPhotos = result.photos.Count;
             foreach (var g in result.groups)
+            {
                 PhotoGroups.Add(g);
+                processedPhotos += g.Photos.Count;
+                photosSinceYield += g.Photos.Count;
+                if (photosSinceYield >= yieldEveryPhotos)
+                {
+                    photosSinceYield = 0;
+                    _loading.UpdateSubMessage($"{processedPhotos} / {totalPhotos}");
+                    await Dispatcher.Yield(DispatcherPriority.Background);
+                }
+            }
 
             UpdateStatus();
 
@@ -528,7 +696,8 @@ public partial class PhotoManagerViewModel : ObservableObject
             if (result.filterByVisit)
             {
                 _currentVisitWorldName = result.visitWorldName;
-                _currentVisitTimeRange = result.visitTimeRange;
+                _currentVisitJoinedAt = result.visitJoinedAt;
+                _currentVisitLeftAt = result.visitLeftAt;
                 _currentVisitPlayers = result.visitPlayers;
 
                 foreach (var p in _currentVisitPlayers)
@@ -545,7 +714,6 @@ public partial class PhotoManagerViewModel : ObservableObject
         }
         finally
         {
-            IsLoading = false;
             _loading.Hide();
         }
     }
@@ -609,20 +777,60 @@ public partial class PhotoManagerViewModel : ObservableObject
         SelectedPhoto = photo;
     }
 
-    /// <summary>選択中の写真を既定のアプリで開く</summary>
+    /// <summary>選択中の写真をアプリ内ビューアーで開く</summary>
     [RelayCommand]
-    private void OpenSelectedPhoto()
+    private async Task OpenSelectedPhotoAsync()
     {
-        if (SelectedPhoto != null && File.Exists(SelectedPhoto.FilePath))
-            Process.Start(new ProcessStartInfo(SelectedPhoto.FilePath) { UseShellExecute = true });
+        await OpenPhotoViewerAsync(SelectedPhoto);
     }
 
-    /// <summary>指定した写真を既定のアプリで開く</summary>
+    /// <summary>指定した写真をアプリ内ビューアーで開く</summary>
     [RelayCommand]
-    private static void OpenPhotoFile(PhotoDisplayItem? photo)
+    private async Task OpenPhotoFileAsync(PhotoDisplayItem? photo)
     {
-        if (photo != null && File.Exists(photo.FilePath))
-            Process.Start(new ProcessStartInfo(photo.FilePath) { UseShellExecute = true });
+        await OpenPhotoViewerAsync(photo);
+    }
+
+    /// <summary>
+    /// ビューアーを閉じた直後など、View 側で特定の写真までスクロールさせたいときに発火するイベント。
+    /// View はこれを購読し、対応するカードを BringIntoView() でスクロール領域に表示する。
+    /// </summary>
+    public event Action<PhotoDisplayItem>? ScrollToPhotoRequested;
+
+    /// <summary>
+    /// アプリ内写真ビューアーを DialogHost で開く。
+    /// 起動時点の PhotoGroups を平坦化したリストを渡し、前後ナビは現在のフィルター結果内で行う。
+    /// 閉じた時点で表示していた写真は SelectedPhoto に反映し、スクロール位置も追従させる。
+    /// </summary>
+    private async Task OpenPhotoViewerAsync(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !File.Exists(photo.FilePath))
+            return;
+
+        try
+        {
+            var photos = PhotoGroups.SelectMany(g => g.Photos).ToList();
+            var index = photos.FindIndex(p => p.FilePath == photo.FilePath);
+            if (index < 0) return;
+
+            var vm = new PhotoViewerViewModel(photos, index);
+            var view = new PhotoViewerView { DataContext = vm };
+
+            await DialogHost.Show(view, "RootDialogHost");
+
+            // ビューアーで最後に見ていた写真をメイン画面で選択状態にしてスクロール反映
+            if (vm.CurrentPhoto != null)
+            {
+                SelectedPhoto = vm.CurrentPhoto;
+                ScrollToPhotoRequested?.Invoke(vm.CurrentPhoto);
+            }
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError(ex);
+            await _dialog.ShowInfoAsync(
+                LocalizationService.GetString("OpenError_ExternalAppFailed"));
+        }
     }
 
     /// <summary>選択中の写真のフォルダをエクスプローラーで開く</summary>
@@ -641,11 +849,14 @@ public partial class PhotoManagerViewModel : ObservableObject
     [RelayCommand]
     private async Task SearchByPlayer(PlayerDisplay player)
     {
-        // フィルター前の状態を保存（フィルター後に復元するため）
+        // フィルター前の状態を保存（フィルター後に復元するため）。
+        // 時間範囲はフォーマット済み文字列ではなく DateTime を保持することで、
+        // 復元後も SelectedPhotoTimeRange は現在のカルチャで動的にフォーマットされる。
         var savedPlayers = SelectedPhotoPlayers.ToList();
         var savedWorldName = SelectedPhotoWorldName;
-        var savedTimeRange = SelectedPhotoTimeRange;
         var savedFilePath = SelectedPhoto?.FilePath;
+        var savedJoinedAt = SelectedPhoto?.WorldJoinedAt ?? _currentVisitJoinedAt;
+        var savedLeftAt = SelectedPhoto?.WorldLeftAt ?? _currentVisitLeftAt;
 
         PlayerFilter = player.DisplayName;
         _searchPlayerUserId = !string.IsNullOrEmpty(player.UserId) ? player.UserId : null;
@@ -662,7 +873,8 @@ public partial class PhotoManagerViewModel : ObservableObject
         // プレイヤーカード・ワールド情報を復元
         _currentVisitPlayers = savedPlayers;
         _currentVisitWorldName = savedWorldName;
-        _currentVisitTimeRange = savedTimeRange;
+        _currentVisitJoinedAt = savedJoinedAt;
+        _currentVisitLeftAt = savedLeftAt;
 
         SelectedPhotoPlayers.Clear();
         foreach (var p in savedPlayers)
@@ -696,10 +908,24 @@ public partial class PhotoManagerViewModel : ObservableObject
     {
         SelectedPhoto = null;
     }
+
+    /// <summary>
+    /// 静的イベントの購読解除と DayChangeWatcher のタイマー停止を行う。
+    /// 現状は Singleton 登録なのでアプリ終了時に DI コンテナから呼ばれる。
+    /// </summary>
+    public void Dispose()
+    {
+        LocalizationService.LanguageChanged -= OnLanguageChanged;
+        _dayChangeWatcher.Dispose();
+        GC.SuppressFinalize(this);
+    }
 }
 
-/// <summary>ワールド訪問単位でグループ化された写真の表示モデル</summary>
-public class PhotoGroupDisplay
+/// <summary>
+/// ワールド訪問単位でグループ化された写真の表示モデル。
+/// 言語切替で曜日付きの滞在時間範囲を再フォーマットさせる必要があるため ObservableObject を継承する。
+/// </summary>
+public class PhotoGroupDisplay : ObservableObject
 {
     /// <summary>ワールド名</summary>
     public string WorldName { get; set; } = string.Empty;
@@ -721,10 +947,19 @@ public class PhotoGroupDisplay
 
     /// <summary>グループヘッダーに表示する滞在時間範囲</summary>
     public string HeaderTimeRange => DateFormatHelper.FormatTimeRange(JoinedAt, LeftAt);
+
+    /// <summary>言語切替時に呼び出されるリフレッシュ。曜日略称や「滞在中」表示の再評価を促す。</summary>
+    public void RefreshLocalizedStrings()
+    {
+        OnPropertyChanged(nameof(HeaderTimeRange));
+    }
 }
 
-/// <summary>写真1枚の表示用モデル</summary>
-public class PhotoDisplayItem
+/// <summary>
+/// 写真1枚の表示用モデル。
+/// 言語切替で曜日付き表示プロパティを再評価させるため ObservableObject を継承する。
+/// </summary>
+public class PhotoDisplayItem : ObservableObject
 {
     /// <summary>写真ファイルのフルパス</summary>
     public string FilePath { get; set; } = string.Empty;
@@ -757,4 +992,11 @@ public class PhotoDisplayItem
     public string WorldTimeRange =>
         WorldJoinedAt == null ? "" :
         DateFormatHelper.FormatTimeRange(WorldJoinedAt.Value, WorldLeftAt);
+
+    /// <summary>言語切替時に呼び出されるリフレッシュ。曜日略称や「滞在中」表示の再評価を促す。</summary>
+    public void RefreshLocalizedStrings()
+    {
+        OnPropertyChanged(nameof(TakenAtDisplay));
+        OnPropertyChanged(nameof(WorldTimeRange));
+    }
 }

@@ -16,6 +16,14 @@ public class PhotoWatcher : IDisposable
     /// <summary>写真ファイルの同時処理を防ぐロック</summary>
     private readonly SemaphoreSlim _processLock = new(1, 1);
 
+    /// <summary>
+    /// Dispose 通知用 CTS。Task.Delay(3000) の待機中や _processLock.WaitAsync 待機中に
+    /// Dispose が走ると、後続の WaitAsync / Release が ObjectDisposedException を投げ、
+    /// async void ハンドラ (OnFileCreated/OnFileRenamed) 経由でアプリをクラッシュさせる。
+    /// CTS でキャンセルを観測してクリーンに抜けることでこれを防ぐ。
+    /// </summary>
+    private readonly CancellationTokenSource _disposeCts = new();
+
     /// <summary>新しい写真が DB に登録された際の通知データ</summary>
     public record PhotoAddedInfo(
         string FilePath, string FileName, DateTime TakenAt,
@@ -77,10 +85,15 @@ public class PhotoWatcher : IDisposable
         var ext = Path.GetExtension(filePath).ToLowerInvariant();
         if (ext is not (".png" or ".jpg" or ".jpeg")) return;
 
-        // VRChat がファイル書き込みを完了するのを待つ
-        await Task.Delay(3000);
+        // 待機系は CTS を観測してキャンセル可能にする。Dispose との競合で例外が出るのを防ぐ。
+        try
+        {
+            await Task.Delay(3000, _disposeCts.Token);
+            await _processLock.WaitAsync(_disposeCts.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
 
-        await _processLock.WaitAsync();
         try
         {
             var timestamp = PhotoScanner.ParsePhotoTimestamp(fileName);
@@ -114,10 +127,10 @@ public class PhotoWatcher : IDisposable
                 filePath, fileName, timestamp.Value,
                 worldVisit?.Id, worldVisit?.WorldName, worldVisit?.JoinedAt));
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
         finally
         {
-            _processLock.Release();
+            try { _processLock.Release(); } catch (ObjectDisposedException) { }
         }
     }
 
@@ -130,13 +143,18 @@ public class PhotoWatcher : IDisposable
             var scanner = new PhotoScanner();
             await scanner.ScanAsync(dir);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     public void Dispose()
     {
         _watcher?.Dispose();
+
+        // 進行中ハンドラに先にキャンセル通知してから semaphore を破棄する。
+        try { _disposeCts.Cancel(); } catch (ObjectDisposedException) { }
+
         _processLock.Dispose();
+        _disposeCts.Dispose();
         GC.SuppressFinalize(this);
     }
 }

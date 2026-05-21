@@ -218,7 +218,7 @@ public partial class SettingsViewModel : ObservableObject
             await _settingsService.SaveAsync();
             StartupRegistryService.Sync(LaunchOnStartup);
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
     }
 
     // ── テーマ変更ハンドラ ──
@@ -254,7 +254,8 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = LocalizationService.GetString("Str_BrowseLogFolder")
+            Title = LocalizationService.GetString("Str_BrowseLogFolder"),
+            InitialDirectory = GetExistingInitialDirectory(LogDirectory)
         };
         if (dialog.ShowDialog() == true)
             LogDirectory = dialog.FolderName;
@@ -269,7 +270,8 @@ public partial class SettingsViewModel : ObservableObject
     {
         var dialog = new Microsoft.Win32.OpenFolderDialog
         {
-            Title = LocalizationService.GetString("Str_BrowsePhotoFolder")
+            Title = LocalizationService.GetString("Str_BrowsePhotoFolder"),
+            InitialDirectory = GetExistingInitialDirectory(PhotoDirectory)
         };
         if (dialog.ShowDialog() != true) return;
 
@@ -308,7 +310,27 @@ public partial class SettingsViewModel : ObservableObject
 
             await db.SaveChangesAsync();
         }
-        catch { }
+        catch (Exception ex) { AppLogger.LogError(ex); }
+    }
+
+    /// <summary>
+    /// フォルダ選択ダイアログの InitialDirectory として渡せる、現存する最も近いディレクトリを返す。
+    /// 設定パスが既に削除されている場合に、上位の親までフォールバックする。
+    /// </summary>
+    private static string GetExistingInitialDirectory(string path)
+    {
+        if (string.IsNullOrWhiteSpace(path)) return string.Empty;
+        try
+        {
+            var current = path;
+            while (!string.IsNullOrEmpty(current))
+            {
+                if (Directory.Exists(current)) return current;
+                current = Path.GetDirectoryName(current);
+            }
+        }
+        catch { /* パス解析の失敗時は空文字を返すだけで、フォルダダイアログの初期位置として無害 */ }
+        return string.Empty;
     }
 
     /// <summary>アプリデータフォルダをエクスプローラーで開く</summary>
