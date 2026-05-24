@@ -1,9 +1,7 @@
 using System.Data.Common;
-using System.Diagnostics;
 using System.IO;
 using System.IO.Pipes;
 using System.Runtime;
-using System.Runtime.InteropServices;
 using System.Text;
 using System.Windows;
 using System.Windows.Markup;
@@ -13,8 +11,8 @@ using MaterialDesignThemes.Wpf;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata;
 using Microsoft.Extensions.DependencyInjection;
-using VRCTimeline.Converters;
 using VRCTimeline.Data;
+using VRCTimeline.Helpers;
 using VRCTimeline.Services;
 using VRCTimeline.Services.LogParser;
 using VRCTimeline.ViewModels;
@@ -292,7 +290,7 @@ public partial class App : Application
     ///   3. サムネイル LRU キャッシュをクリアして BitmapImage 群を解放
     ///   4. LOH コンパクションを 1 回だけ要求してから GC を 2 回実行。Bitmap 等の大型オブジェクトは
     ///      通常 LOH に置かれて GC されにくいため、明示的なコンパクションを挟む
-    ///   5. <see cref="SetProcessWorkingSetSize"/> でワーキングセットを Windows にトリム要求。
+    ///   5. <see cref="NativeMethods.TryTrimWorkingSet"/> でワーキングセットを Windows にトリム要求。
     ///      .NET の GC は managed heap を縮小しても OS の working set は自動では縮小しないため、
     ///      タスクマネージャ表示で「Hide 直後にメモリが下がる」体験を出すには必須
     /// </summary>
@@ -305,23 +303,15 @@ public partial class App : Application
         if (mainWindow is MainWindow mw)
             mw.ClearViewCache(vm.RealtimeMonitorVm);
 
-        PathToThumbnailConverter.ClearCache();
+        ThumbnailCache.Clear();
 
         GCSettings.LargeObjectHeapCompactionMode = GCLargeObjectHeapCompactionMode.CompactOnce;
         GC.Collect();
         GC.WaitForPendingFinalizers();
         GC.Collect();
 
-        try
-        {
-            // -1 / -1 は「可能な限りワーキングセットを縮小」の指示。失敗しても致命ではないので握りつぶす。
-            SetProcessWorkingSetSize(Process.GetCurrentProcess().Handle, (IntPtr)(-1), (IntPtr)(-1));
-        }
-        catch { /* best-effort */ }
+        NativeMethods.TryTrimWorkingSet();
     }
-
-    [DllImport("kernel32.dll", SetLastError = true)]
-    private static extern bool SetProcessWorkingSetSize(IntPtr handle, IntPtr min, IntPtr max);
 
     /// <summary>二重起動時に既存インスタンスのウィンドウ表示を要求する名前付きパイプサーバーを開始する</summary>
     private void StartPipeServer()

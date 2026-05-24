@@ -4,103 +4,28 @@ using System.Windows.Data;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
 using VRCTimeline.Models;
+using VRCTimeline.Services;
 
 namespace VRCTimeline.Converters;
 
 /// <summary>
-/// ファイルパスから縮小サイズの BitmapSource に変換するコンバーター。
-/// 同じパスに対する 2 回目以降の呼び出しはキャッシュから即時に Frozen な BitmapSource を返すため、
-/// サムネイル一覧のスクロール・画面切替後の再表示で BitmapImage の再デコードを起こさない。
+/// ファイルパスから縮小サイズの <see cref="BitmapSource"/> に変換するコンバーター。
+/// LRU 制御は <see cref="ThumbnailCache"/> に委譲し、本クラスは「キャッシュ参照 → なければデコード → キャッシュへ格納」
+/// のフロー制御のみを担当する。Window Hide 時のキャッシュクリアは <see cref="ThumbnailCache.Clear"/> を直接呼ぶ。
 /// </summary>
 public class PathToThumbnailConverter : IValueConverter
 {
-    /// <summary>
-    /// パス → Frozen サムネイル(BitmapImage または CroppedBitmap)のキャッシュ。
-    /// 値はすべて Freeze 済みなのでスレッド間で共有しても安全。
-    /// DecodePixelWidth=224 の縮小版なので 1 枚あたり 100KB 前後。
-    /// メモリ使用量を抑えるため容量上限 <see cref="CacheCapacity"/> 件の LRU として運用し、
-    /// 上限超過時は最も古いエントリから順に破棄する。
-    /// Window Hide 等のタイミングで <see cref="ClearCache"/> を呼び出すと全件破棄できる。
-    /// </summary>
-    private const int CacheCapacity = 500;
-
-    private static readonly LinkedList<KeyValuePair<string, BitmapSource>> _lruList = new();
-    private static readonly Dictionary<string, LinkedListNode<KeyValuePair<string, BitmapSource>>> _cache = new();
-    private static readonly object _lock = new();
-
     public object? Convert(object value, Type targetType, object parameter, CultureInfo culture)
     {
         if (value is not string path || !File.Exists(path)) return null;
 
-        lock (_lock)
-        {
-            if (_cache.TryGetValue(path, out var node))
-            {
-                // ヒット: 最近使用としてリスト先頭へ移動
-                _lruList.Remove(node);
-                _lruList.AddFirst(node);
-                return node.Value.Value;
-            }
-        }
+        if (ThumbnailCache.TryGet(path) is { } cached)
+            return cached;
 
         try
         {
-            var bitmap = new BitmapImage();
-            bitmap.BeginInit();
-            bitmap.UriSource = new Uri(path);
-            bitmap.DecodePixelWidth = 224;
-            bitmap.CacheOption = BitmapCacheOption.OnLoad;
-            bitmap.EndInit();
-            bitmap.Freeze();
-
-            BitmapSource result = bitmap;
-
-            // VRChat 印刷モード写真(2048×1440 ≈ 1.42:1)はフッター枠付き。
-            // 黒い写真領域を囲むように、上寄せで 16:9 に切り出して返す。
-            var w = bitmap.PixelWidth;
-            var h = bitmap.PixelHeight;
-            if (w > 0 && h > 0)
-            {
-                var ratio = (double)w / h;
-                if (ratio >= 1.40 && ratio <= 1.45)
-                {
-                    var cropHeight = (int)Math.Round(w * 9.0 / 16.0);
-                    var yOffset = Math.Max(0, (int)Math.Round(h * 0.02));
-                    if (cropHeight > 0 && yOffset + cropHeight <= h)
-                    {
-                        var cropped = new CroppedBitmap(bitmap, new Int32Rect(0, yOffset, w, cropHeight));
-                        cropped.Freeze();
-                        result = cropped;
-                    }
-                }
-            }
-
-            lock (_lock)
-            {
-                // デコード中に別スレッドが同じパスを追加していた場合に備えて再チェック
-                if (_cache.TryGetValue(path, out var existing))
-                {
-                    _lruList.Remove(existing);
-                    _lruList.AddFirst(existing);
-                    return existing.Value.Value;
-                }
-
-                var node = new LinkedListNode<KeyValuePair<string, BitmapSource>>(
-                    new KeyValuePair<string, BitmapSource>(path, result));
-                _lruList.AddFirst(node);
-                _cache[path] = node;
-
-                // 容量超過時は最も古いエントリ(末尾)を破棄
-                while (_cache.Count > CacheCapacity)
-                {
-                    var oldest = _lruList.Last;
-                    if (oldest is null) break;
-                    _lruList.RemoveLast();
-                    _cache.Remove(oldest.Value.Key);
-                }
-            }
-
-            return result;
+            var decoded = DecodeThumbnail(path);
+            return ThumbnailCache.Put(path, decoded);
         }
         catch
         {
@@ -112,15 +37,33 @@ public class PathToThumbnailConverter : IValueConverter
         => throw new NotSupportedException();
 
     /// <summary>
-    /// サムネイルキャッシュを全件破棄する。Window Hide 等のタイミングで呼び出す想定。
+    /// ファイルから DecodePixelWidth=224 の Frozen な <see cref="BitmapSource"/> をデコードする。
+    /// VRChat 印刷モード写真（2048×1440 ≈ 1.42:1、フッター枠付き）の場合は上寄せで 16:9 にクロップして返す。
     /// </summary>
-    public static void ClearCache()
+    private static BitmapSource DecodeThumbnail(string path)
     {
-        lock (_lock)
-        {
-            _cache.Clear();
-            _lruList.Clear();
-        }
+        var bitmap = new BitmapImage();
+        bitmap.BeginInit();
+        bitmap.UriSource = new Uri(path);
+        bitmap.DecodePixelWidth = 224;
+        bitmap.CacheOption = BitmapCacheOption.OnLoad;
+        bitmap.EndInit();
+        bitmap.Freeze();
+
+        var w = bitmap.PixelWidth;
+        var h = bitmap.PixelHeight;
+        if (w <= 0 || h <= 0) return bitmap;
+
+        var ratio = (double)w / h;
+        if (ratio < 1.40 || ratio > 1.45) return bitmap;
+
+        var cropHeight = (int)Math.Round(w * 9.0 / 16.0);
+        var yOffset = Math.Max(0, (int)Math.Round(h * 0.02));
+        if (cropHeight <= 0 || yOffset + cropHeight > h) return bitmap;
+
+        var cropped = new CroppedBitmap(bitmap, new Int32Rect(0, yOffset, w, cropHeight));
+        cropped.Freeze();
+        return cropped;
     }
 }
 
