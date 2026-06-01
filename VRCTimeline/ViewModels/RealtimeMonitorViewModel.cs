@@ -158,6 +158,7 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
             await ReconcileCurrentVisitAsync(state);
 
             watcher.LogEntryDetected += OnLogEntryDetected;
+            watcher.NewLogSessionStarted += OnNewLogSessionStarted;
             watcher.Start();
             _logWatcher = watcher;
             IsMonitoring = true;
@@ -193,6 +194,40 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     private void OnLogEntryDetected(LogEntry entry)
     {
         Application.Current?.Dispatcher.InvokeAsync(() => ProcessLogEntry(entry));
+    }
+
+    /// <summary>
+    /// 新ログファイル検知（VRChat 再起動）を UI スレッドにディスパッチする。
+    /// ProcessLogEntry と同じ Dispatcher キュー経由かつ同じセマフォで直列化されるため、
+    /// 新ファイルの最初の room join 解析より先に旧訪問のクローズが完了する。
+    /// </summary>
+    private void OnNewLogSessionStarted(DateTime? previousSessionEnd)
+    {
+        Application.Current?.Dispatcher.InvokeAsync(() => HandleNewLogSession(previousSessionEnd));
+    }
+
+    /// <summary>
+    /// VRChat 再起動を検知した際、前セッションで開いたままの訪問を閉じる。
+    /// プロセス監視がスリープ跨ぎ等で終了遷移を取りこぼし、HandleVRChatExited が
+    /// 呼ばれなかった場合でも、ここで旧訪問を確実に閉じて幻の長時間滞在を防ぐ。
+    /// </summary>
+    private async void HandleNewLogSession(DateTime? previousSessionEnd)
+    {
+        try
+        {
+            await _processSemaphore.WaitAsync(_disposeCts.Token);
+        }
+        catch (OperationCanceledException) { return; }
+        catch (ObjectDisposedException) { return; }
+
+        try
+        {
+            await CloseCurrentSessionForRestartAsync(previousSessionEnd);
+        }
+        finally
+        {
+            try { _processSemaphore.Release(); } catch (ObjectDisposedException) { }
+        }
     }
 
     /// <summary>
@@ -235,14 +270,17 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 起動時に、ログから復元した現在状態と DB の未閉訪問を突き合わせて整合化する。
+    /// 起動時に、ログから復元した現在状態と DB の訪問を突き合わせて整合化する。
     ///
     /// 判定ルール:
     ///   ・state == null（VRChat 未接続 or ログ未生成）→ 未閉訪問があれば閉じて DB を綺麗にする。
-    ///   ・未閉訪問が現状態と一致（WorldName / InstanceId / JoinedAt が同じ）→ ID を引き継ぐ。
-    ///   ・一致しない未閉訪問が残っている → ゾンビなので閉じる。LeftAt は確定できないため
+    ///   ・現状態と同じ入室（WorldName + JoinedAt）の訪問が既にある → その訪問を継続する。
+    ///     クローズ済みでも再開（LeftAt を null に戻す）して ID を引き継ぐ。これは VRChat プロセスの
+    ///     誤検知（スリープ復帰等で一瞬「終了」と判定 → 直後に再検知）で HandleVRChatExited が
+    ///     現在の訪問を閉じてしまい、再開時に同一 JoinedAt の訪問が二重作成される問題への対策。
+    ///   ・上記が無く、別ワールドの未閉訪問が残っている → ゾンビなので閉じる。LeftAt は確定できないため
     ///     JoinedAt を入れて 0 秒記録扱いとし、長期間「滞在中」表示が残るのを防ぐ。
-    ///   ・引き継げる未閉訪問が無い & state が現ワールドを示す → 新規 WorldVisit を作って
+    ///   ・引き継げる訪問が無い & state が現ワールドを示す → 新規 WorldVisit を作って
     ///     初期プレイヤーを PlayerSession として書き込む。
     /// </summary>
     private async Task ReconcileCurrentVisitAsync(CurrentSessionState? state)
@@ -250,42 +288,77 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
         try
         {
             await using var db = new AppDbContext();
-            var existing = await db.WorldVisits
-                .Include(v => v.PlayerSessions)
-                .Where(v => v.LeftAt == null)
-                .OrderByDescending(v => v.JoinedAt)
-                .FirstOrDefaultAsync();
 
             if (state == null || state.WorldName == null)
             {
-                // ログから現状態を取れなかった: ゾンビ訪問だけ閉じて終わる
-                if (existing != null)
+                // ログから現状態を取れなかった: 未閉のゾンビ訪問だけ閉じて終わる
+                var zombie = await db.WorldVisits
+                    .Include(v => v.PlayerSessions)
+                    .Where(v => v.LeftAt == null)
+                    .OrderByDescending(v => v.JoinedAt)
+                    .FirstOrDefaultAsync();
+                if (zombie != null)
                 {
-                    existing.LeftAt = existing.JoinedAt;
-                    foreach (var s in existing.PlayerSessions.Where(s => s.LeftAt == null))
-                        s.LeftAt = existing.JoinedAt;
+                    zombie.LeftAt = zombie.JoinedAt;
+                    foreach (var s in zombie.PlayerSessions.Where(s => s.LeftAt == null))
+                        s.LeftAt = zombie.JoinedAt;
                     await db.SaveChangesAsync();
                 }
                 _currentWorldVisitId = null;
                 return;
             }
 
-            // 既存訪問が現状態と完全一致 → 継続
-            if (existing != null &&
-                existing.WorldName == state.WorldName &&
-                existing.InstanceId == (state.InstanceId ?? string.Empty) &&
-                existing.JoinedAt == state.JoinedAt)
+            // 現状態と同じ入室（WorldName + JoinedAt）の訪問が既にあるか。
+            // JoinedAt は "Entering Room" 行のログ秒精度タイムスタンプで 1 入室につき一意なので、
+            // WorldName と合わせれば「同じ訪問」を LeftAt の有無に関わらず確実に同定できる。
+            var sameVisit = await db.WorldVisits
+                .Include(v => v.PlayerSessions)
+                .Where(v => v.WorldName == state.WorldName && v.JoinedAt == state.JoinedAt)
+                .OrderByDescending(v => v.Id)
+                .FirstOrDefaultAsync();
+
+            if (sameVisit != null)
             {
-                _currentWorldVisitId = existing.Id;
+                // InstanceId が未取得なら現状態で補完する
+                if (string.IsNullOrEmpty(sameVisit.InstanceId) && !string.IsNullOrEmpty(state.InstanceId))
+                {
+                    sameVisit.InstanceId = state.InstanceId;
+                    sameVisit.WorldId = LogPatterns.ExtractWorldId(state.InstanceId);
+                }
+
+                // 誤検知終了で閉じられていた場合は再開する。
+                // 今も在室しているプレイヤー（state.CurrentPlayers）のセッションも一緒に再開し、
+                // ブリップ時刻で「退室」したまま残らないようにする。
+                if (sameVisit.LeftAt != null)
+                {
+                    sameVisit.LeftAt = null;
+                    foreach (var p in state.CurrentPlayers)
+                    {
+                        var s = sameVisit.PlayerSessions
+                            .Where(x => !string.IsNullOrEmpty(p.UserId) ? x.UserId == p.UserId : x.DisplayName == p.DisplayName)
+                            .OrderByDescending(x => x.JoinedAt)
+                            .FirstOrDefault();
+                        if (s is { LeftAt: not null })
+                            s.LeftAt = null;
+                    }
+                }
+
+                await db.SaveChangesAsync();
+                _currentWorldVisitId = sameVisit.Id;
                 return;
             }
 
-            // 既存訪問は別ワールド／別セッションのゾンビ → 閉じる
-            if (existing != null)
+            // 別ワールドの未閉訪問が残っていれば閉じる（ゾンビ）
+            var orphan = await db.WorldVisits
+                .Include(v => v.PlayerSessions)
+                .Where(v => v.LeftAt == null)
+                .OrderByDescending(v => v.JoinedAt)
+                .FirstOrDefaultAsync();
+            if (orphan != null)
             {
-                existing.LeftAt = existing.JoinedAt;
-                foreach (var s in existing.PlayerSessions.Where(s => s.LeftAt == null))
-                    s.LeftAt = existing.JoinedAt;
+                orphan.LeftAt = orphan.JoinedAt;
+                foreach (var s in orphan.PlayerSessions.Where(s => s.LeftAt == null))
+                    s.LeftAt = orphan.JoinedAt;
                 await db.SaveChangesAsync();
             }
 
@@ -333,6 +406,34 @@ public partial class RealtimeMonitorViewModel : ObservableObject, IDisposable
                 visit.LeftAt = DateTime.Now;
                 foreach (var s in visit.PlayerSessions.Where(s => s.LeftAt == null))
                     s.LeftAt = DateTime.Now;
+                await db.SaveChangesAsync();
+            }
+            _currentWorldVisitId = null;
+        }
+        catch (Exception ex) { AppLogger.LogError(ex); }
+    }
+
+    /// <summary>
+    /// VRChat 再起動検知時に、前セッションの未クローズ訪問を閉じる。
+    /// LeftAt は旧ログファイルの最終ログ時刻（previousSessionEnd）を使い、取得できなければ
+    /// JoinedAt を入れて 0 秒記録扱いとする。JoinedAt より前にならないようガードする。
+    /// </summary>
+    private async Task CloseCurrentSessionForRestartAsync(DateTime? previousSessionEnd)
+    {
+        if (_currentWorldVisitId == null) return;
+        try
+        {
+            await using var db = new AppDbContext();
+            var visit = await db.WorldVisits
+                .Include(v => v.PlayerSessions)
+                .FirstOrDefaultAsync(v => v.Id == _currentWorldVisitId.Value);
+            if (visit != null && visit.LeftAt == null)
+            {
+                var closeAt = previousSessionEnd ?? visit.JoinedAt;
+                if (closeAt < visit.JoinedAt) closeAt = visit.JoinedAt;
+                visit.LeftAt = closeAt;
+                foreach (var s in visit.PlayerSessions.Where(s => s.LeftAt == null))
+                    s.LeftAt = closeAt;
                 await db.SaveChangesAsync();
             }
             _currentWorldVisitId = null;

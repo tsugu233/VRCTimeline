@@ -56,6 +56,15 @@ public class LogWatcher : IDisposable
     /// <summary>ログ行が解析された際に発火するイベント</summary>
     public event Action<LogEntry>? LogEntryDetected;
 
+    /// <summary>
+    /// 新しいログファイル（= VRChat の再起動）を検知した際に発火するイベント。
+    /// 引数は旧ファイルの最終ログ行タイムスタンプ（取得できなければ null）。
+    /// 購読側は、前セッションで開いたままの訪問をこの時刻で閉じることで、
+    /// スリープ跨ぎ等でプロセス監視が終了遷移を取りこぼしても「幻の長時間滞在」が
+    /// 記録されるのを防げる。新ファイルの最初のイベント解析より前に発火する。
+    /// </summary>
+    public event Action<DateTime?>? NewLogSessionStarted;
+
     /// <summary>監視中かどうか</summary>
     public bool IsMonitoring { get; private set; }
 
@@ -268,10 +277,71 @@ public class LogWatcher : IDisposable
     /// <summary>新しいログファイルが作成された際に監視対象を切り替える</summary>
     private void OnNewFileCreated(object sender, FileSystemEventArgs e)
     {
+        string? oldFile;
+        lock (_lock)
+        {
+            // 既に同じファイルを監視中なら無視（FileSystemWatcher の重複 Created や
+            // 同一パスへの再通知で _lastPosition=0 リセット → 既読分の再処理を防ぐ）。
+            if (e.FullPath == _currentFilePath) return;
+            oldFile = _currentFilePath;
+        }
+
+        // 新ファイル作成は VRChat の再起動を意味する。旧セッションの訪問が未クローズなら
+        // 旧ファイルの最終ログ時刻で閉じるよう購読側へ通知する。
+        // 監視対象を切り替える前に発火することで、新ファイルの room join 解析より先に
+        // 旧訪問のクローズがディスパッチされ、SaveWorldVisitAsync が旧訪問を新入室時刻で
+        // 閉じてしまう（幻の長時間滞在）のを防ぐ。
+        DateTime? previousEnd = oldFile != null ? TryGetLastLogTimestamp(oldFile) : null;
+        NewLogSessionStarted?.Invoke(previousEnd);
+
         lock (_lock)
         {
             _currentFilePath = e.FullPath;
             _lastPosition = 0;
+        }
+    }
+
+    /// <summary>
+    /// ログファイル末尾の数十KBから、タイムスタンプを持つ最後の行のタイムスタンプを返す。
+    /// 取得できない（空・タイムスタンプ無し・IO エラー）場合は null。
+    /// VRChat 再起動時に旧セッションの実質的な終了時刻として使用する。
+    /// </summary>
+    private static DateTime? TryGetLastLogTimestamp(string filePath)
+    {
+        try
+        {
+            using var stream = new FileStream(filePath, FileMode.Open, FileAccess.Read, FileShare.ReadWrite);
+            long len = stream.Length;
+            if (len == 0) return null;
+
+            // 末尾 64KB を読めば最後の完全な行は必ず含まれる（1 行はせいぜい数百バイト）。
+            int toRead = (int)Math.Min(64 * 1024, len);
+            stream.Position = len - toRead;
+            var buf = new byte[toRead];
+            int total = 0;
+            while (total < toRead)
+            {
+                int n = stream.Read(buf, total, toRead - total);
+                if (n == 0) break;
+                total += n;
+            }
+
+            string text = Encoding.UTF8.GetString(buf, 0, total);
+            var lines = text.Split('\n');
+            for (int i = lines.Length - 1; i >= 0; i--)
+            {
+                string line = lines[i].TrimEnd('\r');
+                var m = LogPatterns.TimestampRegex().Match(line);
+                if (m.Success &&
+                    DateTime.TryParseExact(m.Groups[1].Value, LogPatterns.TimestampFormat,
+                        CultureInfo.InvariantCulture, DateTimeStyles.None, out var ts))
+                    return ts;
+            }
+            return null;
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or FileNotFoundException)
+        {
+            return null;
         }
     }
 
