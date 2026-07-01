@@ -3,6 +3,7 @@
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
              xmlns:controls="clr-namespace:VRCTimeline.Controls"
+             xmlns:helpers="clr-namespace:VRCTimeline.Helpers"
              xmlns:vwp="clr-namespace:WpfToolkit.Controls;assembly=VirtualizingWrapPanel"
              Loaded="UserControl_Loaded">
 
@@ -35,15 +36,29 @@
             WorldFilterText="{Binding WorldFilter}"
             SearchCommand="{Binding LoadPhotosCommand}" />
 
-        <!-- Status -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,8">
-            <TextBlock Text="{Binding StatusText}" Opacity="0.6" Margin="0,0,16,0" />
-            <materialDesign:PackIcon Kind="ClockTimeFourOutline" Width="14" Height="14"
-                                      VerticalAlignment="Center" Margin="0,0,5,0"
-                                      Opacity="0.5" />
-            <TextBlock Text="{Binding DateRangeText}" Opacity="0.5" FontSize="12"
-                       VerticalAlignment="Center" />
-        </StackPanel>
+        <!-- Status + multi-select command bar -->
+        <DockPanel Grid.Row="1" Margin="0,0,0,8">
+            <!-- 複数選択時の一括修正コマンドバー（右寄せ） -->
+            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
+                        VerticalAlignment="Center"
+                        Visibility="{Binding HasFixableSelection, Converter={StaticResource BoolToVis}}">
+                <TextBlock Text="{Binding MultiSelectStatus}" VerticalAlignment="Center"
+                           FontSize="12" Opacity="0.7" Margin="0,0,10,0" />
+                <Button Content="{DynamicResource Photo_FixUnknown_Button}"
+                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        Command="{Binding FixSelectedUnknownPhotosCommand}"
+                        Padding="10,2" Height="30" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal">
+                <TextBlock Text="{Binding StatusText}" Opacity="0.6" Margin="0,0,16,0"
+                           VerticalAlignment="Center" />
+                <materialDesign:PackIcon Kind="ClockTimeFourOutline" Width="14" Height="14"
+                                          VerticalAlignment="Center" Margin="0,0,5,0"
+                                          Opacity="0.5" />
+                <TextBlock Text="{Binding DateRangeText}" Opacity="0.5" FontSize="12"
+                           VerticalAlignment="Center" />
+            </StackPanel>
+        </DockPanel>
 
         <!-- Photo Detail Panel (always visible) -->
         <materialDesign:Card Grid.Row="2" Padding="16" Margin="0,0,0,12"
@@ -181,6 +196,8 @@
                  Visibility="{Binding HasNoPhotos, Converter={StaticResource InverseBoolToVis}}"
                  ItemsSource="{Binding Source={StaticResource PhotosViewSource}}"
                  SelectedItem="{Binding SelectedPhoto, Mode=TwoWay}"
+                 SelectionMode="Extended"
+                 helpers:MultiSelectBehavior.BindableSelectedItems="{Binding SelectedPhotos}"
                  Background="Transparent"
                  BorderThickness="0"
                  Padding="0"
@@ -209,6 +226,44 @@
                     <Setter Property="HorizontalContentAlignment" Value="Stretch" />
                     <Setter Property="VerticalContentAlignment" Value="Stretch" />
                     <Setter Property="FocusVisualStyle" Value="{x:Null}" />
+                    <!-- ContextMenu は別ビジュアルツリー(Popup)のため、ListBoxItem の Tag に VM を載せて
+                         PlacementTarget.Tag 経由でコマンドへ到達する。CommandParameter は
+                         PlacementTarget.DataContext = 右クリックした写真の PhotoDisplayItem。 -->
+                    <Setter Property="Tag"
+                            Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=ListBox}}" />
+                    <Setter Property="ContextMenu">
+                        <Setter.Value>
+                            <ContextMenu>
+                                <MenuItem Header="{DynamicResource Ctx_CopyWorldUrl}"
+                                          Command="{Binding PlacementTarget.Tag.CopyWorldUrlCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasWorldId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="{DynamicResource Ctx_OpenWorldInBrowser}"
+                                          Command="{Binding PlacementTarget.Tag.OpenWorldInBrowserCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasWorldId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <Separator />
+                                <MenuItem Header="{DynamicResource Ctx_CopyInstanceUrl}"
+                                          Command="{Binding PlacementTarget.Tag.CopyInstanceUrlCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="{DynamicResource Ctx_OpenInstanceInBrowser}"
+                                          Command="{Binding PlacementTarget.Tag.OpenInstanceInBrowserCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <Separator />
+                                <MenuItem Header="{DynamicResource Ctx_CopyWorldName}"
+                                          Command="{Binding PlacementTarget.Tag.CopyWorldNameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasWorldName, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <Separator />
+                                <MenuItem Header="{DynamicResource Activity_Rejoin}"
+                                          Command="{Binding PlacementTarget.Tag.RejoinInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                            </ContextMenu>
+                        </Setter.Value>
+                    </Setter>
                     <Setter Property="Template">
                         <Setter.Value>
                             <ControlTemplate TargetType="ListBoxItem">
@@ -237,6 +292,17 @@
                                                               Opacity="0.5" />
                                     <TextBlock Text="{Binding Name.HeaderTimeRange}" FontSize="12"
                                                VerticalAlignment="Center" Opacity="0.6" />
+                                    <!-- 「不明」グループ＋自分で編集した手動データに編集（鉛筆）ボタンを表示 -->
+                                    <Button Margin="10,0,0,0" Padding="0" Width="26" Height="26"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource MaterialDesignIconButton}"
+                                            ToolTip="{DynamicResource Photo_FixEdit_Title}"
+                                            Visibility="{Binding Name.IsEditable, Converter={StaticResource BoolToVis}}"
+                                            Command="{Binding DataContext.FixGroupCommand,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding Name}">
+                                        <materialDesign:PackIcon Kind="Pencil" Width="16" Height="16" />
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>

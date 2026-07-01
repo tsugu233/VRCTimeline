@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using Microsoft.Win32;
+using VRCTimeline.Services.LogParser;
 
 namespace VRCTimeline.Services;
 
@@ -8,6 +9,37 @@ namespace VRCTimeline.Services;
 /// </summary>
 public static class VRChatLauncher
 {
+    /// <summary>
+    /// フルインスタンスID ("wrld_xxx:nonce~region") から、ブラウザで開ける
+    /// インスタンス起動ページ URL を組み立てる。
+    /// ログイン済みブラウザで開くと InviteMe / Launch でクライアント再起動なしに移動できる。
+    /// 例: "https://vrchat.com/home/launch?worldId=wrld_xxx&amp;instanceId=12345~region(...)"
+    /// </summary>
+    public static string InstanceLaunchUrl(string fullInstanceId)
+    {
+        var worldId = LogPatterns.ExtractWorldId(fullInstanceId);
+        var colonIndex = fullInstanceId.IndexOf(':');
+        var instancePart = colonIndex >= 0 ? fullInstanceId[(colonIndex + 1)..] : string.Empty;
+        return $"https://vrchat.com/home/launch?worldId={Uri.EscapeDataString(worldId)}&instanceId={Uri.EscapeDataString(instancePart)}";
+    }
+
+    /// <summary>
+    /// フルインスタンスID からワールド紹介ページ URL を組み立てる（インスタンス情報は含まない）。
+    /// 例: "https://vrchat.com/home/world/wrld_xxx"
+    /// </summary>
+    public static string WorldPageUrl(string fullInstanceId)
+    {
+        var worldId = LogPatterns.ExtractWorldId(fullInstanceId);
+        return $"https://vrchat.com/home/world/{Uri.EscapeDataString(worldId)}";
+    }
+
+    /// <summary>指定 URL を既定のブラウザ／アプリで開く</summary>
+    public static void OpenInBrowser(string url)
+    {
+        if (string.IsNullOrEmpty(url)) return;
+        Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
+    }
+
     /// <summary>指定インスタンスIDの VRChat ワールドに参加する</summary>
     public static void LaunchInstance(string instanceId)
     {

@@ -32,4 +32,10 @@ public class AppSettings
 
     /// <summary>UI 言語コード ("ja" / "en" / "ko")。空文字の場合は初回起動時にシステム設定から自動検出する</summary>
     public string Language { get; set; } = string.Empty;
+
+    /// <summary>
+    /// 各一覧画面の初期表示期間（日数）。開始日を「今日の N 日前」に設定する。
+    /// 設定画面の「既定期間」で変更でき、各VMの初期範囲に反映される。既定は 14 日（直近2週間）。
+    /// </summary>
+    public int DefaultFilterDays { get; set; } = 14;
 }

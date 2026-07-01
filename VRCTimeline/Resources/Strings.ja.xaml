@@ -21,6 +21,12 @@
     <sys:String x:Key="Activity_JoinedPlayers">参加プレイヤー</sys:String>
     <sys:String x:Key="Activity_EncounterCount">遭遇回数: </sys:String>
     <sys:String x:Key="Activity_TotalTime">合計時間: </sys:String>
+    <!-- Activity History: 右クリックメニュー -->
+    <sys:String x:Key="Ctx_CopyInstanceUrl">インスタンスURLをコピー</sys:String>
+    <sys:String x:Key="Ctx_OpenInstanceInBrowser">インスタンスをブラウザで開く</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldUrl">ワールドURLをコピー</sys:String>
+    <sys:String x:Key="Ctx_OpenWorldInBrowser">ワールドをブラウザで開く</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldName">ワールド名をコピー</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">アクティビティを表示</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">写真を開く</sys:String>
@@ -30,6 +36,23 @@
     <sys:String x:Key="Photo_Viewer_Previous">前へ</sys:String>
     <sys:String x:Key="Photo_Viewer_Next">次へ</sys:String>
     <sys:String x:Key="Photo_Viewer_Close">閉じる</sys:String>
+    <!-- Photos: 不明なワールドの手動修正 -->
+    <sys:String x:Key="Photo_FixUnknown_Title">不明なワールドを修正</sys:String>
+    <sys:String x:Key="Photo_FixEdit_Title">編集</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Undo">この修正を取り消す（写真を「不明」に戻す）</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Button">選択した写真を修正</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_TargetCount">対象: {0} 枚</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_WorldNameHint">ワールド名（任意・未入力で「不明なワールド」）</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AssignExisting">既存の訪問に割り当てる</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_CreateNew">新しいワールド名を入力</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AddFriends">参加プレイヤーを追加</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_FriendSearchHint">プレイヤー名で検索・入力</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoCandidates">近接する訪問が見つかりません</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Save">保存</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Cancel">キャンセル</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">修正対象の「不明なワールド」写真がありません。</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Saving">保存中...</sys:String>
+    <sys:String x:Key="Photo_MultiSelectStatus">{0} 枚選択中</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">ディレクトリ設定</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChatログフォルダ</sys:String>
@@ -44,6 +67,14 @@
     <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">VRChat検出時にウィンドウを表示</sys:String>
     <sys:String x:Key="Settings_LaunchOnStartup">Windows起動時に実行</sys:String>
     <sys:String x:Key="Settings_MinimizeOnStartup">起動時に最小化</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod">既定の表示期間</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod_Hint">表示期間の選択は「～」から変更できます。</sys:String>
+    <sys:String x:Key="Settings_Period_1Week">1週間</sys:String>
+    <sys:String x:Key="Settings_Period_2Weeks">2週間</sys:String>
+    <sys:String x:Key="Settings_Period_1Month">1ヶ月</sys:String>
+    <sys:String x:Key="Settings_Period_3Months">3ヶ月</sys:String>
+    <sys:String x:Key="Settings_Period_6Months">半年</sys:String>
+    <sys:String x:Key="Settings_Period_1Year">1年</sys:String>
     <sys:String x:Key="Settings_LanguageSettings">言語設定(Language)</sys:String>
     <sys:String x:Key="Settings_DataManagement">データ管理</sys:String>
     <sys:String x:Key="Settings_ImportTitle">VRChatActivityLogViewer データ引き継ぎ</sys:String>
@@ -72,6 +103,7 @@
     <sys:String x:Key="Filter_Type">種類</sys:String>
     <sys:String x:Key="Filter_All">すべて</sys:String>
     <sys:String x:Key="Filter_Search">検索</sys:String>
+    <sys:String x:Key="Filter_Period">期間</sys:String>
     <!-- Realtime / Log messages -->
     <sys:String x:Key="Str_NotConnected">未接続</sys:String>
     <sys:String x:Key="Log_WorldJoined">ワールドに入室: </sys:String>
@@ -85,6 +117,7 @@
     <sys:String x:Key="Log_VRChatExited">VRChatが終了しました</sys:String>
     <!-- Misc -->
     <sys:String x:Key="Str_StayingInWorld">滞在中</sys:String>
+    <sys:String x:Key="Str_TimeUnknown">不明</sys:String>
     <sys:String x:Key="Confirm_Rejoin">「{0}」に入り直しますか？</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">この訪問の写真は見つかりませんでした。</sys:String>
     <sys:String x:Key="OpenError_ExternalAppFailed">フォトビューアーの起動に失敗しました&#x0a;既定のアプリ設定を確認してください。</sys:String>

@@ -24,6 +24,13 @@ public class WorldVisit
     /// <summary>ワールドから退室した日時（滞在中は null）</summary>
     public DateTime? LeftAt { get; set; }
 
+    /// <summary>
+    /// ユーザーが手動で作成した訪問かどうか。
+    /// ログが消えて「不明なワールド」になった写真を手動修正する際に作成される訪問を識別する。
+    /// 既存データはすべて false（ログ由来）。WorldId / InstanceId は空のため再参加ボタンは無効になる。
+    /// </summary>
+    public bool IsManual { get; set; }
+
     /// <summary>この訪問中に同室したプレイヤーのセッション一覧</summary>
     public List<PlayerSession> PlayerSessions { get; set; } = [];
 

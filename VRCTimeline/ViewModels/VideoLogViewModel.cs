@@ -16,6 +16,7 @@ namespace VRCTimeline.ViewModels;
 public partial class VideoLogViewModel : ObservableObject, IDisposable
 {
     private readonly LoadingService _loading;
+    private readonly SettingsService _settings;
 
     /// <summary>動画情報取得サービス</summary>
     private readonly VideoInfoService _videoInfoService = new();
@@ -71,9 +72,11 @@ public partial class VideoLogViewModel : ObservableObject, IDisposable
         _filterDateToFollowsToday = value.Date == DateTime.Today;
     }
 
-    public VideoLogViewModel(LoadingService loadingService)
+    public VideoLogViewModel(LoadingService loadingService, SettingsService settingsService)
     {
         _loading = loadingService;
+        _settings = settingsService;
+        FilterDateFrom = DateTime.Today.AddDays(-_settings.Settings.DefaultFilterDays);
         _dayChangeWatcher = new DayChangeWatcher(() =>
         {
             if (_filterDateToFollowsToday) FilterDateTo = DateTime.Today;

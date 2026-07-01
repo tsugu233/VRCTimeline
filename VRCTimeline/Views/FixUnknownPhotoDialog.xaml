@@ -1,0 +1,159 @@
+<UserControl x:Class="VRCTimeline.Views.FixUnknownPhotoDialog"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+             MaxWidth="460" MinWidth="420">
+    <Grid Margin="28,24,28,18" MaxHeight="640">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+            <RowDefinition Height="Auto" />
+        </Grid.RowDefinitions>
+
+        <!-- Header -->
+        <StackPanel Grid.Row="0" Margin="0,0,0,12">
+            <TextBlock Text="{Binding TitleText}" FontSize="18" FontWeight="Medium" />
+            <TextBlock Text="{Binding SubtitleText}" Opacity="0.7" FontSize="12" Margin="0,4,0,0" />
+        </StackPanel>
+
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto">
+            <StackPanel>
+                <!-- CreateOrAssign: mode toggle (assign existing / create new) -->
+                <StackPanel Visibility="{Binding ShowModeToggle, Converter={StaticResource BoolToVis}}">
+                    <RadioButton GroupName="FixMode"
+                                 IsEnabled="{Binding HasCandidates}"
+                                 IsChecked="{Binding UseExistingVisit, Mode=TwoWay}"
+                                 Content="{DynamicResource Photo_FixUnknown_AssignExisting}"
+                                 Margin="0,0,0,4" />
+                    <ComboBox ItemsSource="{Binding Candidates}"
+                              SelectedItem="{Binding SelectedCandidate}"
+                              DisplayMemberPath="Display"
+                              IsEnabled="{Binding UseExistingVisit}"
+                              Visibility="{Binding UseExistingVisit, Converter={StaticResource BoolToVis}}"
+                              Margin="28,0,0,8" />
+                    <TextBlock Text="{DynamicResource Photo_FixUnknown_NoCandidates}"
+                               Opacity="0.6" FontSize="12" Margin="28,0,0,8"
+                               Visibility="{Binding HasCandidates, Converter={StaticResource InverseBoolToVis}}" />
+
+                    <RadioButton GroupName="FixMode"
+                                 IsChecked="{Binding CreateNewMode, Mode=TwoWay}"
+                                 Content="{DynamicResource Photo_FixUnknown_CreateNew}"
+                                 Margin="0,0,0,4" />
+                    <TextBox Text="{Binding WorldName, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="{DynamicResource Photo_FixUnknown_WorldNameHint}"
+                             IsEnabled="{Binding CreateNewMode}"
+                             Visibility="{Binding CreateNewMode, Converter={StaticResource BoolToVis}}"
+                             Margin="28,0,0,12" />
+                </StackPanel>
+
+                <!-- EditManualVisit: rename field -->
+                <TextBox Text="{Binding WorldName, UpdateSourceTrigger=PropertyChanged}"
+                         materialDesign:HintAssist.Hint="{DynamicResource Photo_FixUnknown_WorldNameHint}"
+                         Visibility="{Binding ShowRenameField, Converter={StaticResource BoolToVis}}"
+                         Margin="0,0,0,12" />
+
+                <!-- EditRealVisitFriends: read-only world name -->
+                <StackPanel Orientation="Horizontal" Margin="0,0,0,12"
+                            Visibility="{Binding ShowReadOnlyWorld, Converter={StaticResource BoolToVis}}">
+                    <materialDesign:PackIcon Kind="Earth" VerticalAlignment="Center"
+                                              Width="16" Height="16" Margin="0,0,8,0" Opacity="0.7" />
+                    <TextBlock Text="{Binding CurrentWorldName}" VerticalAlignment="Center"
+                               FontWeight="Medium" />
+                </StackPanel>
+
+                <Separator Margin="0,4,0,12" Opacity="0.4" />
+
+                <!-- Friend tagging -->
+                <TextBlock Text="{DynamicResource Photo_FixUnknown_AddFriends}"
+                           FontWeight="Medium" FontSize="13" Margin="0,0,0,6" />
+
+                <Grid Margin="0,0,0,4">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBox Grid.Column="0"
+                             Text="{Binding FriendSearchText, UpdateSourceTrigger=PropertyChanged}"
+                             materialDesign:HintAssist.Hint="{DynamicResource Photo_FixUnknown_FriendSearchHint}"
+                             materialDesign:TextFieldAssist.HasClearButton="True">
+                        <TextBox.InputBindings>
+                            <KeyBinding Key="Return" Command="{Binding AddFriendFreeTextCommand}" />
+                        </TextBox.InputBindings>
+                    </TextBox>
+                    <Button Grid.Column="1" Margin="6,0,0,0"
+                            Style="{StaticResource MaterialDesignIconButton}"
+                            Width="32" Height="32"
+                            ToolTip="{DynamicResource Photo_FixUnknown_AddFriends}"
+                            Command="{Binding AddFriendFreeTextCommand}">
+                        <materialDesign:PackIcon Kind="Plus" />
+                    </Button>
+                </Grid>
+
+                <!-- Suggestions -->
+                <ItemsControl ItemsSource="{Binding FriendSuggestions}" Margin="0,0,0,4">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <Button HorizontalContentAlignment="Left"
+                                    Padding="8,2"
+                                    Style="{StaticResource MaterialDesignFlatButton}"
+                                    Command="{Binding DataContext.AddFriendFromSuggestionCommand,
+                                        RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                    CommandParameter="{Binding}">
+                                <StackPanel Orientation="Horizontal">
+                                    <materialDesign:PackIcon Kind="AccountPlus" VerticalAlignment="Center"
+                                                              Width="16" Height="16" Margin="0,0,8,0" Opacity="0.7" />
+                                    <TextBlock Text="{Binding DisplayName}" />
+                                </StackPanel>
+                            </Button>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+
+                <!-- Tagged friends as chips -->
+                <ItemsControl ItemsSource="{Binding TaggedFriends}" Margin="0,4,0,0">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel />
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <materialDesign:Chip Content="{Binding DisplayName}" Margin="2"
+                                                  IsDeletable="True"
+                                                  DeleteCommand="{Binding DataContext.RemoveFriendCommand,
+                                                      RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                                  DeleteCommandParameter="{Binding}" />
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </StackPanel>
+        </ScrollViewer>
+
+        <!-- Buttons -->
+        <StackPanel Grid.Row="2" Margin="0,16,0,0">
+            <!-- Undo (manual visit edit only): 独立した行に配置して重なりを防ぐ -->
+            <Button HorizontalAlignment="Left" Margin="0,0,0,8"
+                    Style="{StaticResource MaterialDesignFlatButton}"
+                    Foreground="{DynamicResource ValidationErrorBrush}"
+                    Visibility="{Binding AllowUndo, Converter={StaticResource BoolToVis}}"
+                    Command="{Binding UndoCommand}">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="DeleteRestore" VerticalAlignment="Center"
+                                              Width="16" Height="16" Margin="0,0,6,0" />
+                    <TextBlock Text="{DynamicResource Photo_FixUnknown_Undo}" VerticalAlignment="Center" />
+                </StackPanel>
+            </Button>
+
+            <StackPanel Orientation="Horizontal" HorizontalAlignment="Right">
+                <Button Content="{DynamicResource Photo_FixUnknown_Cancel}"
+                        MinWidth="80" Margin="0,0,8,0"
+                        Style="{StaticResource MaterialDesignFlatMidBgButton}"
+                        Command="{x:Static materialDesign:DialogHost.CloseDialogCommand}" />
+                <Button Content="{DynamicResource Photo_FixUnknown_Save}"
+                        MinWidth="80"
+                        Style="{StaticResource MaterialDesignRaisedButton}"
+                        Command="{Binding SaveCommand}" />
+            </StackPanel>
+        </StackPanel>
+    </Grid>
+</UserControl>

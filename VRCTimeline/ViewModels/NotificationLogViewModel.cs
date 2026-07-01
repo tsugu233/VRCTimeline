@@ -16,6 +16,7 @@ namespace VRCTimeline.ViewModels;
 public partial class NotificationLogViewModel : ObservableObject, IDisposable
 {
     private readonly LoadingService _loading;
+    private readonly SettingsService _settings;
 
     /// <summary>初回ロード完了フラグ</summary>
     private bool _initialized;
@@ -48,9 +49,11 @@ public partial class NotificationLogViewModel : ObservableObject, IDisposable
     /// <summary>通知種別フィルターの選択肢（言語変更時に再構築される）</summary>
     public ObservableCollection<string> TypeFilters { get; } = [];
 
-    public NotificationLogViewModel(LoadingService loadingService)
+    public NotificationLogViewModel(LoadingService loadingService, SettingsService settingsService)
     {
         _loading = loadingService;
+        _settings = settingsService;
+        FilterDateFrom = DateTime.Today.AddDays(-_settings.Settings.DefaultFilterDays);
         RebuildTypeFilters();
         LocalizationService.LanguageChanged += OnLanguageChanged;
         _dayChangeWatcher = new DayChangeWatcher(() =>

@@ -21,6 +21,12 @@
     <sys:String x:Key="Activity_JoinedPlayers">참가 플레이어</sys:String>
     <sys:String x:Key="Activity_EncounterCount">조우 횟수: </sys:String>
     <sys:String x:Key="Activity_TotalTime">총 시간: </sys:String>
+    <!-- Activity History: 우클릭 메뉴 -->
+    <sys:String x:Key="Ctx_CopyInstanceUrl">인스턴스 URL 복사</sys:String>
+    <sys:String x:Key="Ctx_OpenInstanceInBrowser">인스턴스를 브라우저에서 열기</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldUrl">월드 URL 복사</sys:String>
+    <sys:String x:Key="Ctx_OpenWorldInBrowser">월드를 브라우저에서 열기</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldName">월드 이름 복사</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">활동 보기</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">사진 열기</sys:String>
@@ -30,6 +36,23 @@
     <sys:String x:Key="Photo_Viewer_Previous">이전</sys:String>
     <sys:String x:Key="Photo_Viewer_Next">다음</sys:String>
     <sys:String x:Key="Photo_Viewer_Close">닫기</sys:String>
+    <!-- Photos: 알 수 없는 월드 수동 수정 -->
+    <sys:String x:Key="Photo_FixUnknown_Title">알 수 없는 월드 수정</sys:String>
+    <sys:String x:Key="Photo_FixEdit_Title">편집</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Undo">이 수정을 취소(사진을 '알 수 없음'으로 되돌리기)</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Button">선택한 사진 수정</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_TargetCount">대상: {0}장</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_WorldNameHint">월드 이름(선택, 비우면 '알 수 없는 월드')</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AssignExisting">기존 방문에 할당</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_CreateNew">새 월드 이름 입력</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AddFriends">참가 플레이어 추가</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_FriendSearchHint">플레이어 이름 검색·입력</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoCandidates">근접한 방문을 찾을 수 없습니다</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Save">저장</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Cancel">취소</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">수정할 '알 수 없는 월드' 사진이 없습니다.</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Saving">저장 중...</sys:String>
+    <sys:String x:Key="Photo_MultiSelectStatus">{0}장 선택됨</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">디렉토리 설정</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChat 로그 폴더</sys:String>
@@ -44,6 +67,14 @@
     <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">VRChat 감지 시 창 표시</sys:String>
     <sys:String x:Key="Settings_LaunchOnStartup">Windows 시작 시 실행</sys:String>
     <sys:String x:Key="Settings_MinimizeOnStartup">시작 시 최소화</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod">기본 표시 기간</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod_Hint">표시 기간은 "～"에서도 변경할 수 있습니다.</sys:String>
+    <sys:String x:Key="Settings_Period_1Week">1주일</sys:String>
+    <sys:String x:Key="Settings_Period_2Weeks">2주일</sys:String>
+    <sys:String x:Key="Settings_Period_1Month">1개월</sys:String>
+    <sys:String x:Key="Settings_Period_3Months">3개월</sys:String>
+    <sys:String x:Key="Settings_Period_6Months">6개월</sys:String>
+    <sys:String x:Key="Settings_Period_1Year">1년</sys:String>
     <sys:String x:Key="Settings_LanguageSettings">언어 설정(Language)</sys:String>
     <sys:String x:Key="Settings_DataManagement">데이터 관리</sys:String>
     <sys:String x:Key="Settings_ImportTitle">VRChatActivityLogViewer 데이터 가져오기</sys:String>
@@ -72,6 +103,7 @@
     <sys:String x:Key="Filter_Type">종류</sys:String>
     <sys:String x:Key="Filter_All">전체</sys:String>
     <sys:String x:Key="Filter_Search">검색</sys:String>
+    <sys:String x:Key="Filter_Period">기간</sys:String>
     <!-- Realtime / Log messages -->
     <sys:String x:Key="Str_NotConnected">미연결</sys:String>
     <sys:String x:Key="Log_WorldJoined">월드 입장: </sys:String>
@@ -85,6 +117,7 @@
     <sys:String x:Key="Log_VRChatExited">VRChat이 종료되었습니다</sys:String>
     <!-- Misc -->
     <sys:String x:Key="Str_StayingInWorld">체류 중</sys:String>
+    <sys:String x:Key="Str_TimeUnknown">불명</sys:String>
     <sys:String x:Key="Confirm_Rejoin">「{0}」에 재참가하시겠습니까?</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">이 방문의 사진을 찾을 수 없습니다.</sys:String>
     <sys:String x:Key="OpenError_ExternalAppFailed">사진 뷰어를 실행하는 데 실패했습니다.&#x0a;기본 앱 설정을 확인해 주세요.</sys:String>

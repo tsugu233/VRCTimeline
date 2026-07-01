@@ -86,8 +86,24 @@
                         CalendarStyle="{StaticResource DarkCalendar}"
                         Width="150" Margin="0,0,8,4"
                         Loaded="DatePicker_Loaded" />
+
+            <!-- 「～」をクリックすると期間プリセットメニューが開く（開始＝今日−N・終了＝今日 を適用して即検索） -->
             <TextBlock Text="～" VerticalAlignment="Center" Margin="0,0,8,4"
-                       FontSize="16" />
+                       FontSize="16" Cursor="Hand" Background="Transparent"
+                       ToolTip="{DynamicResource Filter_Period}"
+                       MouseLeftButtonUp="PeriodSeparator_Click">
+                <TextBlock.ContextMenu>
+                    <ContextMenu>
+                        <MenuItem Header="{DynamicResource Settings_Period_1Week}"  Tag="7"   Click="PeriodPreset_Click" />
+                        <MenuItem Header="{DynamicResource Settings_Period_2Weeks}" Tag="14"  Click="PeriodPreset_Click" />
+                        <MenuItem Header="{DynamicResource Settings_Period_1Month}" Tag="30"  Click="PeriodPreset_Click" />
+                        <MenuItem Header="{DynamicResource Settings_Period_3Months}" Tag="90"  Click="PeriodPreset_Click" />
+                        <MenuItem Header="{DynamicResource Settings_Period_6Months}" Tag="180" Click="PeriodPreset_Click" />
+                        <MenuItem Header="{DynamicResource Settings_Period_1Year}"  Tag="365" Click="PeriodPreset_Click" />
+                    </ContextMenu>
+                </TextBlock.ContextMenu>
+            </TextBlock>
+
             <DatePicker SelectedDate="{Binding FilterDateTo, ElementName=Root}"
                         materialDesign:HintAssist.Hint="{DynamicResource Filter_EndDate}"
                         CalendarStyle="{StaticResource DarkCalendar}"

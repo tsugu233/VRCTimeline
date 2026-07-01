@@ -23,6 +23,14 @@ public class PlayerSession
     /// <summary>退室日時。null の場合はまだ在室中またはログ欠損</summary>
     public DateTime? LeftAt { get; set; }
 
+    /// <summary>
+    /// ユーザーが手動で追加した同席者かどうか。
+    /// 「不明なワールド」写真の手動修正で当時のフレンドをタグ付けした際に true になる。
+    /// 記憶ベースのため、遭遇統計（回数・合計時間）の集計からは除外する（プレイヤーカード表示には出す）。
+    /// 既存データはすべて false（ログ由来）。
+    /// </summary>
+    public bool IsManual { get; set; }
+
     /// <summary>ナビゲーションプロパティ</summary>
     public WorldVisit WorldVisit { get; set; } = null!;
 }
