@@ -375,6 +375,7 @@ public partial class App : Application
         services.AddSingleton<DialogService>();
         services.AddSingleton<NavigationService>();
         services.AddSingleton<SelfPlayerService>();
+        services.AddSingleton<ManualPhotoFixService>();
         services.AddSingleton<VRChatProcessMonitor>();
         services.AddSingleton<PhotoWatcher>();
         services.AddTransient<LogScanner>();

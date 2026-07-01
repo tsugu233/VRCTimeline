@@ -21,6 +21,12 @@
     <sys:String x:Key="Activity_JoinedPlayers">Players</sys:String>
     <sys:String x:Key="Activity_EncounterCount">Encounters: </sys:String>
     <sys:String x:Key="Activity_TotalTime">Total Time: </sys:String>
+    <!-- Activity History: context menu -->
+    <sys:String x:Key="Ctx_CopyInstanceUrl">Copy instance URL</sys:String>
+    <sys:String x:Key="Ctx_OpenInstanceInBrowser">Open instance in browser</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldUrl">Copy world URL</sys:String>
+    <sys:String x:Key="Ctx_OpenWorldInBrowser">Open world in browser</sys:String>
+    <sys:String x:Key="Ctx_CopyWorldName">Copy world name</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">Show Activity</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">Open Photo</sys:String>
@@ -30,6 +36,23 @@
     <sys:String x:Key="Photo_Viewer_Previous">Previous</sys:String>
     <sys:String x:Key="Photo_Viewer_Next">Next</sys:String>
     <sys:String x:Key="Photo_Viewer_Close">Close</sys:String>
+    <!-- Photos: manual fix for unknown world -->
+    <sys:String x:Key="Photo_FixUnknown_Title">Fix Unknown World</sys:String>
+    <sys:String x:Key="Photo_FixEdit_Title">Edit</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Undo">Undo this fix (revert photos to Unknown)</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Button">Fix Selected Photos</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_TargetCount">Target: {0} photo(s)</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_WorldNameHint">World name (optional, blank = "Unknown World")</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AssignExisting">Assign to an existing visit</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_CreateNew">Enter a new world name</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_AddFriends">Add players</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_FriendSearchHint">Search or type a player name</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoCandidates">No nearby visits found</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Save">Save</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Cancel">Cancel</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">No "unknown world" photos to fix.</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_Saving">Saving...</sys:String>
+    <sys:String x:Key="Photo_MultiSelectStatus">{0} selected</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">Directory Settings</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChat Log Folder</sys:String>
@@ -44,6 +67,14 @@
     <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">Show window when VRChat launches</sys:String>
     <sys:String x:Key="Settings_LaunchOnStartup">Launch on Windows startup</sys:String>
     <sys:String x:Key="Settings_MinimizeOnStartup">Minimize on launch</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod">Default period</sys:String>
+    <sys:String x:Key="Settings_DefaultPeriod_Hint">You can also change the display period from the "~" separator.</sys:String>
+    <sys:String x:Key="Settings_Period_1Week">1 Week</sys:String>
+    <sys:String x:Key="Settings_Period_2Weeks">2 Weeks</sys:String>
+    <sys:String x:Key="Settings_Period_1Month">1 Month</sys:String>
+    <sys:String x:Key="Settings_Period_3Months">3 Months</sys:String>
+    <sys:String x:Key="Settings_Period_6Months">6 Months</sys:String>
+    <sys:String x:Key="Settings_Period_1Year">1 Year</sys:String>
     <sys:String x:Key="Settings_LanguageSettings">Language</sys:String>
     <sys:String x:Key="Settings_DataManagement">Data Management</sys:String>
     <sys:String x:Key="Settings_ImportTitle">Import from VRChatActivityLogViewer</sys:String>
@@ -72,6 +103,7 @@
     <sys:String x:Key="Filter_Type">Type</sys:String>
     <sys:String x:Key="Filter_All">All</sys:String>
     <sys:String x:Key="Filter_Search">Search</sys:String>
+    <sys:String x:Key="Filter_Period">Period</sys:String>
     <!-- Realtime / Log messages -->
     <sys:String x:Key="Str_NotConnected">Not Connected</sys:String>
     <sys:String x:Key="Log_WorldJoined">Joined world: </sys:String>
@@ -85,6 +117,7 @@
     <sys:String x:Key="Log_VRChatExited">VRChat has exited</sys:String>
     <!-- Misc -->
     <sys:String x:Key="Str_StayingInWorld">Staying</sys:String>
+    <sys:String x:Key="Str_TimeUnknown">Unknown</sys:String>
     <sys:String x:Key="Confirm_Rejoin">Rejoin "{0}"?</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">No photos found for this visit.</sys:String>
     <sys:String x:Key="OpenError_ExternalAppFailed">The photo viewer failed to launch.&#x0a;Please check your default app settings.</sys:String>

@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -13,6 +14,13 @@ namespace VRCTimeline.ViewModels;
 public sealed class LanguageOption
 {
     public string Code { get; init; } = string.Empty;
+    public string DisplayName { get; init; } = string.Empty;
+}
+
+/// <summary>既定表示期間の選択肢モデル（日数 + ローカライズ済み表示名）</summary>
+public sealed class FilterPeriodOption
+{
+    public int Days { get; init; }
     public string DisplayName { get; init; } = string.Empty;
 }
 
@@ -115,12 +123,55 @@ public partial class SettingsViewModel : ObservableObject
         }
     }
 
+    /// <summary>各一覧画面の既定表示期間（日数）。SelectedPeriod 経由で更新され、永続化される。</summary>
+    [ObservableProperty]
+    private int _defaultFilterDays = 14;
+
+    /// <summary>選択中の既定表示期間</summary>
+    private FilterPeriodOption? _selectedPeriod;
+
+    /// <summary>選択可能な既定表示期間の一覧（言語変更時に再構築される）</summary>
+    public ObservableCollection<FilterPeriodOption> AvailablePeriods { get; } = [];
+
+    public FilterPeriodOption? SelectedPeriod
+    {
+        get => _selectedPeriod;
+        set
+        {
+            if (!SetProperty(ref _selectedPeriod, value) || value == null) return;
+            // DefaultFilterDays は SaveableProperties に含まれるため、変更でデバウンス保存が走る。
+            DefaultFilterDays = value.Days;
+        }
+    }
+
+    /// <summary>言語に合わせて既定期間の選択肢を再構築する</summary>
+    private void RebuildPeriodOptions()
+    {
+        AvailablePeriods.Clear();
+        AvailablePeriods.Add(new() { Days = 7, DisplayName = LocalizationService.GetString("Settings_Period_1Week") });
+        AvailablePeriods.Add(new() { Days = 14, DisplayName = LocalizationService.GetString("Settings_Period_2Weeks") });
+        AvailablePeriods.Add(new() { Days = 30, DisplayName = LocalizationService.GetString("Settings_Period_1Month") });
+        AvailablePeriods.Add(new() { Days = 90, DisplayName = LocalizationService.GetString("Settings_Period_3Months") });
+        AvailablePeriods.Add(new() { Days = 180, DisplayName = LocalizationService.GetString("Settings_Period_6Months") });
+        AvailablePeriods.Add(new() { Days = 365, DisplayName = LocalizationService.GetString("Settings_Period_1Year") });
+    }
+
+    /// <summary>言語切替時に既定期間の選択肢ラベルを再生成し、選択状態を維持する</summary>
+    private void OnLanguageChanged()
+    {
+        RebuildPeriodOptions();
+        // 同じ Days の選択肢を新しいラベル付きで選び直す（保存はトリガしない）。
+        _selectedPeriod = AvailablePeriods.FirstOrDefault(p => p.Days == DefaultFilterDays);
+        OnPropertyChanged(nameof(SelectedPeriod));
+    }
+
     /// <summary>変更時に自動保存するプロパティの名前一覧</summary>
     private static readonly HashSet<string> SaveableProperties =
     [
         nameof(LogDirectory), nameof(PhotoDirectory), nameof(LaunchOnStartup),
         nameof(MinimizeOnStartup), nameof(AutoDetectVRChat), nameof(IsDarkMode),
-        nameof(AccentColorHex), nameof(ButtonTextColorHex), nameof(SelectedLanguage)
+        nameof(AccentColorHex), nameof(ButtonTextColorHex), nameof(SelectedLanguage),
+        nameof(DefaultFilterDays)
     ];
 
     public SettingsViewModel(SettingsService settingsService, LoadingService loadingService, DialogService dialogService, NavigationService navigationService, PhotoWatcher photoWatcher)
@@ -130,7 +181,10 @@ public partial class SettingsViewModel : ObservableObject
         _dialog = dialogService;
         _navigation = navigationService;
         _photoWatcher = photoWatcher;
+        RebuildPeriodOptions();
         LoadFromSettings();
+        // 既定期間の選択肢ラベルを言語切替に追従させる（本 VM は Singleton のため解除不要）。
+        LocalizationService.LanguageChanged += OnLanguageChanged;
         _ = CheckExistingDataAsync();
     }
 
@@ -166,6 +220,10 @@ public partial class SettingsViewModel : ObservableObject
             _selectedLanguage = AvailableLanguages.FirstOrDefault(l => l.Code == s.Language)
                                  ?? AvailableLanguages[0];
             OnPropertyChanged(nameof(SelectedLanguage));
+
+            DefaultFilterDays = s.DefaultFilterDays;
+            _selectedPeriod = AvailablePeriods.FirstOrDefault(p => p.Days == s.DefaultFilterDays);
+            OnPropertyChanged(nameof(SelectedPeriod));
         }
         finally
         {
@@ -215,6 +273,7 @@ public partial class SettingsViewModel : ObservableObject
             s.AccentColorHex = AccentColorHex;
             s.ButtonTextColorHex = ButtonTextColorHex;
             s.Language = SelectedLanguage?.Code ?? string.Empty;
+            s.DefaultFilterDays = DefaultFilterDays;
             await _settingsService.SaveAsync();
             StartupRegistryService.Sync(LaunchOnStartup);
         }

@@ -193,6 +193,39 @@ public partial class FilterBarControl : UserControl
         set => SetValue(SearchCommandProperty, value);
     }
 
+    // ── 期間プリセット（「～」クリックメニュー） ──
+
+    /// <summary>
+    /// 開始日を「今日の days 日前」、終了日を「今日」に設定して再検索する。
+    /// 終了日を今日へ揃えることで、起動したままで EndDate が古い日付に固定される問題も同時に解消する。
+    /// </summary>
+    private void ApplyRange(int days)
+    {
+        // 先に終了日を今日へ。FilterDateTo の TwoWay バインドで VM 側の追従フラグも更新される。
+        FilterDateTo = DateTime.Today;
+        FilterDateFrom = DateTime.Today.AddDays(-days);
+        SearchCommand?.Execute(null);
+    }
+
+    /// <summary>「～」を左クリックしたら期間プリセットの ContextMenu を直下に開く。</summary>
+    private void PeriodSeparator_Click(object sender, MouseButtonEventArgs e)
+    {
+        if (sender is FrameworkElement fe && fe.ContextMenu is { } menu)
+        {
+            menu.PlacementTarget = fe;
+            menu.Placement = PlacementMode.Bottom;
+            menu.IsOpen = true;
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>期間プリセット選択。MenuItem.Tag の日数で範囲を適用して再検索する。</summary>
+    private void PeriodPreset_Click(object sender, RoutedEventArgs e)
+    {
+        if (sender is MenuItem mi && mi.Tag is string s && int.TryParse(s, out var days))
+            ApplyRange(days);
+    }
+
     // ── フィルター項目の表示制御 ──
 
     /// <summary>プレイヤー名フィルターを表示するか</summary>
@@ -282,10 +315,33 @@ public partial class FilterBarControl : UserControl
         // 揺らぎが残るが、同期化が技術的に不可能なため受け入れる。
         tb.TextChanged += (_, _) =>
         {
+            // ユーザーが手入力中（キーボードフォーカスがテキストボックス内）の間は強制リフォーマットしない。
+            // これをしないと一文字打つたびに旧 SelectedDate 由来のテキストへ書き戻され、日付の手入力ができなくなる。
+            // 確定後の整形は下の SelectedDateChanged / LostFocus 経路が担う。
+            if (tb.IsKeyboardFocusWithin) return;
             if (!dp.SelectedDate.HasValue) return;
             var expected = dp.SelectedDate.Value.ToString("yyyy/MM/dd (ddd)", DateFormatHelper.GetCurrentCulture());
             if (tb.Text != expected)
                 Dispatcher.BeginInvoke(DispatcherPriority.Background, () => tb.Text = expected);
+        };
+
+        // 手入力の確定（Enter / フォーカス喪失で DatePicker が text をパースして SelectedDate を更新）後に、
+        // 当方の "yyyy/MM/dd (ddd)" 形式へ整形し直す。TextChanged はフォーカス中ガードで素通しするため、
+        // この2経路で確定後の整形を担保する。プログラム的な日付変更（期間プリセット/バインド）にも追従する。
+        dp.SelectedDateChanged += (_, _) => RefreshDatePickerText(dp);
+        tb.LostFocus += (_, _) => RefreshDatePickerText(dp);
+
+        // クリック/タブ移動でフォーカスした際に全選択し、そのまま日付を上書き入力できるようにする。
+        // クリック時はキャレット配置で選択が解除されるため、未フォーカス状態の最初のクリックを
+        // 横取りして Focus() に置き換え、GotKeyboardFocus 経由で SelectAll を一度だけ走らせる。
+        tb.GotKeyboardFocus += (_, _) => tb.SelectAll();
+        tb.PreviewMouseLeftButtonDown += (_, args) =>
+        {
+            if (!tb.IsKeyboardFocusWithin)
+            {
+                args.Handled = true;
+                tb.Focus();
+            }
         };
 
         if (dp.SelectedDate.HasValue)

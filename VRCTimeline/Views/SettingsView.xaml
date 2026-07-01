@@ -100,12 +100,24 @@
                         <TextBlock Text="{DynamicResource Settings_LaunchOnStartup}" VerticalAlignment="Center" />
                     </DockPanel>
 
-                    <DockPanel>
+                    <DockPanel Margin="0,0,0,16">
                         <ToggleButton DockPanel.Dock="Right"
                                       IsChecked="{Binding MinimizeOnStartup}"
                                       Style="{StaticResource MaterialDesignSwitchToggleButton}" />
                         <TextBlock Text="{DynamicResource Settings_MinimizeOnStartup}" VerticalAlignment="Center" />
                     </DockPanel>
+
+                    <DockPanel>
+                        <ComboBox DockPanel.Dock="Right"
+                                  ItemsSource="{Binding AvailablePeriods}"
+                                  SelectedItem="{Binding SelectedPeriod}"
+                                  DisplayMemberPath="DisplayName"
+                                  Width="160" />
+                        <TextBlock Text="{DynamicResource Settings_DefaultPeriod}" VerticalAlignment="Center" />
+                    </DockPanel>
+                    <TextBlock Text="{DynamicResource Settings_DefaultPeriod_Hint}"
+                               Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                               Opacity="0.6" TextWrapping="Wrap" Margin="0,6,0,0" />
 
                 </StackPanel>
             </materialDesign:Card>
@@ -181,7 +193,7 @@
                     </StackPanel>
                 </StackPanel>
             </materialDesign:Card>
-            <TextBlock Text="VRC Timeline   v1.2.1"
+            <TextBlock Text="VRC Timeline   v1.3.0"
                        Style="{StaticResource MaterialDesignCaptionTextBlock}"
                        Opacity="0.4" HorizontalAlignment="Right" />
         </StackPanel>

@@ -28,6 +28,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
     private readonly NavigationService _navigation;
     private readonly DialogService _dialog;
     private readonly SelfPlayerService _selfPlayer;
+    private readonly ManualPhotoFixService _manualFix;
 
     /// <summary>初回ロード完了フラグ</summary>
     private bool _initialized;
@@ -149,6 +150,23 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
     /// <summary>選択中の写真に関連するプレイヤーの一覧</summary>
     public ObservableCollection<PlayerDisplay> SelectedPhotoPlayers { get; } = [];
 
+    /// <summary>
+    /// 複数選択（拡張選択）された写真の一覧。MultiSelectBehavior 経由で ListBox.SelectedItems をミラーする。
+    /// 「不明なワールド」写真の一括修正コマンドの対象になる。
+    /// </summary>
+    public ObservableCollection<PhotoDisplayItem> SelectedPhotos { get; } = [];
+
+    /// <summary>
+    /// 選択中に「不明なワールド」写真が1件以上あるか。
+    /// 一括修正コマンドバーは、修正が実際に適用できるこの場合のみ表示する
+    /// （通常の閲覧目的の単一選択ではバーを出さない）。
+    /// </summary>
+    public bool HasFixableSelection => SelectedPhotos.Any(p => p.WorldVisitId == null);
+
+    /// <summary>「N 枚選択中」表示文字列</summary>
+    public string MultiSelectStatus =>
+        string.Format(LocalizationService.GetString("Photo_MultiSelectStatus"), SelectedPhotos.Count);
+
     /// <summary>写真が選択されているか</summary>
     public bool IsPhotoSelected => SelectedPhoto != null;
 
@@ -179,13 +197,26 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         LoadingService loadingService,
         NavigationService navigationService,
         DialogService dialogService,
-        SelfPlayerService selfPlayerService)
+        SelfPlayerService selfPlayerService,
+        ManualPhotoFixService manualFixService)
     {
         _settingsService = settingsService;
         _loading = loadingService;
         _navigation = navigationService;
         _dialog = dialogService;
         _selfPlayer = selfPlayerService;
+        _manualFix = manualFixService;
+
+        // 初期表示期間を設定値（既定14日）から決定する。終了日は今日のまま。
+        FilterDateFrom = DateTime.Today.AddDays(-_settingsService.Settings.DefaultFilterDays);
+
+        // 複数選択（一括修正用）の変更を CanExecute・件数表示へ反映する
+        SelectedPhotos.CollectionChanged += (_, _) =>
+        {
+            OnPropertyChanged(nameof(HasFixableSelection));
+            OnPropertyChanged(nameof(MultiSelectStatus));
+            FixSelectedUnknownPhotosCommand.NotifyCanExecuteChanged();
+        };
 
         // PhotoWatcher からのリアルタイム通知を購読
         photoWatcher.PhotoAdded += OnPhotoAdded;
@@ -387,7 +418,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             await using var db = new AppDbContext();
             var players = await db.PlayerSessions
                 .Where(s => s.WorldVisitId == selected.WorldVisitId.Value)
-                .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt })
+                .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt, s.IsManual })
                 .ToListAsync();
             selected.Players = players
                 .Select(p => new PlayerDisplay
@@ -395,11 +426,12 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                     DisplayName = LogPatterns.CleanPlayerName(p.DisplayName),
                     UserId = p.UserId,
                     JoinedAt = p.JoinedAt,
-                    LeftAt = p.LeftAt
+                    LeftAt = p.LeftAt,
+                    IsManual = p.IsManual
                 })
                 .Where(p => p.DisplayName != selfName)
                 .GroupBy(p => p.DisplayName)
-                .Select(g => g.First())
+                .Select(g => { var f = g.First(); f.IsManual = g.All(x => x.IsManual); return f; })
                 .OrderBy(p => p.JoinedAt)
                 .ToList();
         }
@@ -526,6 +558,13 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                     photos = photos.Take(150).ToList();
                 _isInitialLoad = false;
 
+                // 手動同席者 (IsManual) を含む訪問ID集合。グループの編集可否マーキングに使う。
+                var manualVisitIds = (await db.PlayerSessions.AsNoTracking()
+                    .Where(s => s.IsManual)
+                    .Select(s => s.WorldVisitId)
+                    .Distinct()
+                    .ToListAsync()).ToHashSet();
+
                 // ── ワールド訪問ごとにグループ化 ──
                 // 各 PhotoDisplayItem に属するグループへの参照(Group)を設定する。
                 // この参照は View 側で CollectionViewSource のグループ化キーに使われ、
@@ -541,6 +580,9 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                             JoinedAt = first.WorldVisit?.JoinedAt ?? first.TakenAt,
                             LeftAt = first.WorldVisit?.LeftAt,
                             WorldVisitId = first.WorldVisitId,
+                            IsManual = first.WorldVisit?.IsManual ?? false,
+                            HasManualPlayers = first.WorldVisitId.HasValue
+                                && manualVisitIds.Contains(first.WorldVisitId.Value),
                         };
                         var items = new ObservableCollection<PhotoDisplayItem>(
                             g.OrderByDescending(p => p.TakenAt).Select(p => new PhotoDisplayItem
@@ -552,6 +594,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                                 WorldJoinedAt = p.WorldVisit?.JoinedAt,
                                 WorldLeftAt = p.WorldVisit?.LeftAt,
                                 WorldVisitId = p.WorldVisitId,
+                                InstanceId = p.WorldVisit?.InstanceId ?? string.Empty,
                                 Group = groupDisplay
                             }));
                         groupDisplay.Photos = items;
@@ -580,7 +623,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
 
                     var rawPlayers = await db.PlayerSessions
                         .Where(s => s.WorldVisitId == visitId)
-                        .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt })
+                        .Select(s => new { s.DisplayName, s.UserId, s.JoinedAt, s.LeftAt, s.IsManual })
                         .ToListAsync();
                     visitPlayers = rawPlayers
                         .Select(p => new PlayerDisplay
@@ -588,11 +631,12 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                             DisplayName = LogPatterns.CleanPlayerName(p.DisplayName),
                             UserId = p.UserId,
                             JoinedAt = p.JoinedAt,
-                            LeftAt = p.LeftAt
+                            LeftAt = p.LeftAt,
+                            IsManual = p.IsManual
                         })
                         .Where(p => p.DisplayName != selfName)
                         .GroupBy(p => p.DisplayName)
-                        .Select(g => g.First())
+                        .Select(g => { var f = g.First(); f.IsManual = g.All(x => x.IsManual); return f; })
                         .OrderBy(p => p.JoinedAt)
                         .ToList();
                 }
@@ -609,14 +653,15 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                     {
                         // カードクリック: SQL で UserId 一致を直接引く
                         var targetUserId = searchPlayerUserId;
+                        // 手動タグ付けの同席者 (IsManual) は記憶ベースのため遭遇統計から除外する。
                         var byUserId = await db.PlayerSessions.AsNoTracking()
-                            .Where(s => s.UserId == targetUserId)
+                            .Where(s => s.UserId == targetUserId && !s.IsManual)
                             .ToListAsync();
 
                         // UserId が空のセッション (旧 activity log インポート由来等) は DisplayName でフォールバック。
                         var fallbackName = playerFilter!.Trim();
                         var emptyIdSessions = await db.PlayerSessions.AsNoTracking()
-                            .Where(s => s.UserId == "")
+                            .Where(s => s.UserId == "" && !s.IsManual)
                             .ToListAsync();
                         var byName = emptyIdSessions
                             .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, fallbackName))
@@ -628,7 +673,10 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                         // テキスト入力: 全期間データから名前一致セッションの UserId を解決し、
                         // 同 UserId の全セッション（改名後含む）＋ UserId 空の名前一致をまとめてヒット対象にする。
                         var search = playerFilter!.Trim();
-                        var allSessions = await db.PlayerSessions.AsNoTracking().ToListAsync();
+                        // 手動タグ付けの同席者 (IsManual) は遭遇統計から除外する。
+                        var allSessions = await db.PlayerSessions.AsNoTracking()
+                            .Where(s => !s.IsManual)
+                            .ToListAsync();
                         var summaryUserIds = allSessions
                             .Where(s => !string.IsNullOrEmpty(s.UserId)
                                         && KanaHelper.ContainsKanaInsensitive(s.DisplayName, search))
@@ -964,6 +1012,190 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         SelectedPhoto = null;
     }
 
+    /// <summary>複数選択中の「不明なワールド」写真を一括で手動修正する（コマンドバーから）。</summary>
+    [RelayCommand(CanExecute = nameof(CanFixSelectedUnknownPhotos))]
+    private async Task FixSelectedUnknownPhotosAsync()
+    {
+        var targets = SelectedPhotos.Where(p => p.WorldVisitId == null).ToList();
+        await FixUnknownPhotosAsync(targets);
+    }
+
+    /// <summary>選択中に1枚でも「不明なワールド」写真があれば一括修正可能。</summary>
+    private bool CanFixSelectedUnknownPhotos() => SelectedPhotos.Any(p => p.WorldVisitId == null);
+
+    /// <summary>
+    /// グループヘッダーの編集（鉛筆）ボタンの振り分け。
+    /// 「不明」グループは初回修正フロー、手動訪問／手動フレンドを持つ実訪問は再編集フローへ。
+    /// </summary>
+    [RelayCommand]
+    private async Task FixGroupAsync(PhotoGroupDisplay? group)
+    {
+        if (group == null) return;
+        if (group.WorldVisitId == null)
+        {
+            var targets = group.Photos.Where(p => p.WorldVisitId == null).ToList();
+            await FixUnknownPhotosAsync(targets);
+        }
+        else
+        {
+            await EditVisitAsync(group);
+        }
+    }
+
+    /// <summary>
+    /// 手動訪問／手動フレンドを持つ実訪問を再編集する。
+    /// 手動訪問: 名前変更・手動フレンド編集・修正の取り消し。実訪問: 手動フレンドの追加/削除のみ。
+    /// ログ由来のデータ（実ワールド名・実プレイヤー）は一切変更しない。
+    /// </summary>
+    private async Task EditVisitAsync(PhotoGroupDisplay group)
+    {
+        if (group.WorldVisitId is not int visitId) return;
+
+        var selfUserId = await _selfPlayer.GetSelfUserIdAsync();
+        var selfName = await _selfPlayer.GetSelfPlayerNameAsync();
+        var knownPlayers = await _manualFix.GetKnownPlayersAsync(selfUserId, selfName);
+        var existing = await _manualFix.GetManualPlayerSessionsAsync(visitId);
+        var existingFriends = existing
+            .Select(e => new TaggedFriend(LogPatterns.CleanPlayerName(e.DisplayName), e.UserId, e.Id))
+            .ToList();
+
+        var mode = group.IsManual ? FixDialogMode.EditManualVisit : FixDialogMode.EditRealVisitFriends;
+        var dialogVm = new FixUnknownPhotoDialogViewModel(
+            mode, group.Photos.Count, group.WorldName, [], knownPlayers, existingFriends);
+        var dialogView = new FixUnknownPhotoDialog { DataContext = dialogVm };
+        await DialogHost.Show(dialogView, "RootDialogHost");
+
+        var anchorPath = group.Photos.OrderByDescending(p => p.TakenAt).FirstOrDefault()?.FilePath;
+
+        // 修正の取り消し（手動訪問のみ）: 写真を「不明」に戻し、手動訪問と手動フレンドを削除する。
+        if (dialogVm.UndoRequested)
+        {
+            _loading.Show(LocalizationService.GetString("Photo_FixUnknown_Saving"));
+            try { await _manualFix.UndoManualVisitAsync(visitId); }
+            catch (Exception ex) { AppLogger.LogError(ex); }
+            finally { _loading.Hide(); }
+            await ReloadAndScrollToAsync(anchorPath);
+            return;
+        }
+
+        if (!dialogVm.Confirmed) return;
+
+        _loading.Show(LocalizationService.GetString("Photo_FixUnknown_Saving"));
+        try
+        {
+            // ワールド名変更（手動訪問のみ）。
+            if (dialogVm.AllowRename)
+                await _manualFix.RenameVisitAsync(visitId, dialogVm.WorldName);
+
+            // 手動フレンドの差分適用: 既存から外されたものを削除、新規追加分を追加。
+            var originalIds = existing.Select(e => e.Id).ToHashSet();
+            var keptIds = dialogVm.TaggedFriends
+                .Where(t => t.SessionId.HasValue)
+                .Select(t => t.SessionId!.Value)
+                .ToHashSet();
+
+            foreach (var removedId in originalIds.Where(id => !keptIds.Contains(id)))
+                await _manualFix.RemoveManualPlayerSessionAsync(removedId);
+
+            foreach (var added in dialogVm.TaggedFriends.Where(t => !t.SessionId.HasValue))
+                await _manualFix.AddManualPlayerSessionAsync(
+                    visitId, added.DisplayName, added.UserId, group.JoinedAt, group.LeftAt);
+        }
+        catch (Exception ex) { AppLogger.LogError(ex); }
+        finally { _loading.Hide(); }
+
+        await ReloadAndScrollToAsync(anchorPath);
+    }
+
+    /// <summary>
+    /// 編集後の共通後処理。選択をクリアして再読み込みし、編集対象の写真までスクロール位置を復元する
+    /// （一覧が先頭へ戻らないようにする）。
+    /// </summary>
+    private async Task ReloadAndScrollToAsync(string? anchorPath)
+    {
+        SelectedPhotos.Clear();
+        await ReloadAsync();
+        if (anchorPath == null) return;
+        var anchor = PhotoGroups.SelectMany(g => g.Photos).FirstOrDefault(p => p.FilePath == anchorPath);
+        if (anchor != null)
+        {
+            SelectedPhoto = anchor;
+            ScrollToPhotoRequested?.Invoke(anchor);
+        }
+    }
+
+    /// <summary>
+    /// 「不明なワールド」写真群の手動修正ダイアログを開き、結果に応じて
+    /// 既存訪問への割り当て or 手動訪問作成＋写真割り当て＋手動同席者追加を行う。
+    /// 割り当て後は孤立写真群が1つの訪問グループに統合されるため再読み込みする。
+    /// </summary>
+    private async Task FixUnknownPhotosAsync(IReadOnlyList<PhotoDisplayItem> targets)
+    {
+        if (targets.Count == 0)
+        {
+            await _dialog.ShowInfoAsync(LocalizationService.GetString("Photo_FixUnknown_NoTargets"));
+            return;
+        }
+
+        var fromTime = targets.Min(p => p.TakenAt);
+        var toTime = targets.Max(p => p.TakenAt);
+
+        var selfUserId = await _selfPlayer.GetSelfUserIdAsync();
+        var selfName = await _selfPlayer.GetSelfPlayerNameAsync();
+
+        var candidates = await _manualFix.GetCandidateVisitsAsync(fromTime, toTime);
+        var knownPlayers = await _manualFix.GetKnownPlayersAsync(selfUserId, selfName);
+
+        var dialogVm = new FixUnknownPhotoDialogViewModel(
+            FixDialogMode.CreateOrAssign, targets.Count, null, candidates, knownPlayers, []);
+        var dialogView = new FixUnknownPhotoDialog { DataContext = dialogVm };
+        await DialogHost.Show(dialogView, "RootDialogHost");
+
+        if (!dialogVm.Confirmed) return;
+
+        _loading.Show(LocalizationService.GetString("Photo_FixUnknown_Saving"));
+        try
+        {
+            int visitId;
+            DateTime visitJoinedAt;
+            DateTime? visitLeftAt;
+
+            if (dialogVm.UseExistingVisit && dialogVm.SelectedCandidate != null)
+            {
+                visitId = dialogVm.SelectedCandidate.Id;
+                visitJoinedAt = dialogVm.SelectedCandidate.JoinedAt;
+                visitLeftAt = dialogVm.SelectedCandidate.LeftAt;
+            }
+            else
+            {
+                // 手動訪問は写真の撮影時刻範囲を入退室時刻として作成する。
+                visitJoinedAt = fromTime;
+                visitLeftAt = toTime;
+                visitId = await _manualFix.CreateManualVisitAsync(dialogVm.WorldName, fromTime, toTime);
+            }
+
+            var filePaths = targets.Select(p => p.FilePath).ToList();
+            await _manualFix.AssignPhotosToVisitAsync(filePaths, visitId);
+
+            // 手動同席者は対象訪問の時間範囲を入退室時刻として付与する（統計には含めない）。
+            foreach (var friend in dialogVm.TaggedFriends)
+                await _manualFix.AddManualPlayerSessionAsync(
+                    visitId, friend.DisplayName, friend.UserId, visitJoinedAt, visitLeftAt);
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError(ex);
+        }
+        finally
+        {
+            _loading.Hide();
+        }
+
+        // 編集後に一覧が先頭へ戻らないよう、修正対象（最新の撮影時刻）の写真までスクロール位置を復元する。
+        var anchorPath = targets.OrderByDescending(p => p.TakenAt).First().FilePath;
+        await ReloadAndScrollToAsync(anchorPath);
+    }
+
     /// <summary>
     /// Window 非表示時に表示用リソースを破棄する。
     /// Singleton VM そのものは生存し続けるため、再表示時には UserControl_Loaded → InitializeAsync で再ロードできるよう
@@ -976,6 +1208,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         PhotoGroups.Clear();
         Photos.Clear();
         SelectedPhoto = null;
+        SelectedPhotos.Clear();
         SelectedPhotoPlayers.Clear();
         HasNoPhotos = false;
         StatusText = string.Empty;
@@ -993,6 +1226,57 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         _photoMaxDate = null;
         _initialized = false;
         _isInitialLoad = true;
+    }
+
+    // ── 右クリックメニュー（写真の元ワールドへの再参加 / URL 操作） ──
+
+    /// <summary>ワールド紹介ページ URL をクリップボードにコピーする（再訪用）</summary>
+    [RelayCommand]
+    private void CopyWorldUrl(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasWorldId) return;
+        ClipboardHelper.SetText(VRChatLauncher.WorldPageUrl(photo.InstanceId));
+    }
+
+    /// <summary>ワールド紹介ページを既定ブラウザで開く（再訪用）</summary>
+    [RelayCommand]
+    private void OpenWorldInBrowser(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasWorldId) return;
+        VRChatLauncher.OpenInBrowser(VRChatLauncher.WorldPageUrl(photo.InstanceId));
+    }
+
+    /// <summary>インスタンス起動ページ URL をクリップボードにコピーする（InviteMe での移動用）</summary>
+    [RelayCommand]
+    private void CopyInstanceUrl(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasInstanceId) return;
+        ClipboardHelper.SetText(VRChatLauncher.InstanceLaunchUrl(photo.InstanceId));
+    }
+
+    /// <summary>インスタンス起動ページを既定ブラウザで開く（InviteMe での移動用）</summary>
+    [RelayCommand]
+    private void OpenInstanceInBrowser(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasInstanceId) return;
+        VRChatLauncher.OpenInBrowser(VRChatLauncher.InstanceLaunchUrl(photo.InstanceId));
+    }
+
+    /// <summary>ワールド名（テキスト）をクリップボードにコピーする</summary>
+    [RelayCommand]
+    private void CopyWorldName(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasWorldName) return;
+        ClipboardHelper.SetText(photo.WorldName!);
+    }
+
+    /// <summary>右クリックした写真のインスタンスに再参加する（確認ダイアログ付き）</summary>
+    [RelayCommand]
+    private async Task RejoinInstanceAsync(PhotoDisplayItem? photo)
+    {
+        if (photo == null || !photo.HasInstanceId) return;
+        if (await _dialog.ShowConfirmAsync(string.Format(LocalizationService.GetString("Confirm_Rejoin"), photo.WorldName)))
+            VRChatLauncher.LaunchInstance(photo.InstanceId);
     }
 
     /// <summary>
@@ -1024,6 +1308,24 @@ public class PhotoGroupDisplay : ObservableObject
 
     /// <summary>対応するワールド訪問のID</summary>
     public int? WorldVisitId { get; set; }
+
+    /// <summary>
+    /// ワールド訪問に紐づかない「不明なワールド」グループかどうか。
+    /// </summary>
+    public bool IsUnknownWorld => WorldVisitId == null;
+
+    /// <summary>このグループの訪問がユーザー作成の手動訪問かどうか。</summary>
+    public bool IsManual { get; set; }
+
+    /// <summary>このグループの訪問が手動同席者（IsManual セッション）を1人以上含むか。</summary>
+    public bool HasManualPlayers { get; set; }
+
+    /// <summary>
+    /// グループヘッダーの編集（鉛筆）ボタンを表示すべきか。
+    /// 「不明」グループ（初回修正）、手動訪問（名前/フレンド編集・取り消し）、
+    /// 手動フレンドを持つ実訪問（手動フレンドの編集）のいずれか＝自分が編集したデータを後から直せる。
+    /// </summary>
+    public bool IsEditable => IsUnknownWorld || IsManual || HasManualPlayers;
 
     /// <summary>このグループに属する写真の一覧</summary>
     public ObservableCollection<PhotoDisplayItem> Photos { get; set; } = [];
@@ -1067,6 +1369,21 @@ public class PhotoDisplayItem : ObservableObject
 
     /// <summary>対応するワールド訪問のID</summary>
     public int? WorldVisitId { get; set; }
+
+    /// <summary>対応するワールド訪問のインスタンスID（再参加・URL生成用）</summary>
+    public string InstanceId { get; set; } = string.Empty;
+
+    /// <summary>インスタンスIDから抽出したワールドID（再訪・URL生成用）</summary>
+    public string WorldId => LogPatterns.ExtractWorldId(InstanceId);
+
+    /// <summary>再参加・インスタンスURL操作が可能か（インスタンスIDを持つ場合のみ）</summary>
+    public bool HasInstanceId => !string.IsNullOrEmpty(InstanceId);
+
+    /// <summary>有効なワールドIDを持つか（不明ワールド・旧データは InstanceId が空のため false）</summary>
+    public bool HasWorldId => WorldId.StartsWith("wrld_");
+
+    /// <summary>ワールド名を持つか（ワールド名コピーの可否判定用）</summary>
+    public bool HasWorldName => !string.IsNullOrEmpty(WorldName);
 
     /// <summary>この写真に関連するプレイヤーリスト（遅延読み込み・キャッシュ）</summary>
     public List<PlayerDisplay> Players { get; set; } = [];

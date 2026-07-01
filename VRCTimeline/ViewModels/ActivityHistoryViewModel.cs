@@ -20,6 +20,7 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
     private readonly NavigationService _navigation;
     private readonly DialogService _dialog;
     private readonly SelfPlayerService _selfPlayer;
+    private readonly SettingsService _settings;
 
     /// <summary>プレイヤー検索の表示テキスト（UI のフィルター入力欄にバインド）</summary>
     [ObservableProperty]
@@ -106,12 +107,18 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
         LoadingService loadingService,
         NavigationService navigationService,
         DialogService dialogService,
-        SelfPlayerService selfPlayerService)
+        SelfPlayerService selfPlayerService,
+        SettingsService settingsService)
     {
         _loading = loadingService;
         _navigation = navigationService;
         _dialog = dialogService;
         _selfPlayer = selfPlayerService;
+        _settings = settingsService;
+
+        // 初期表示期間を設定値（既定14日）から決定する。終了日は今日のまま。
+        FilterDateFrom = DateTime.Today.AddDays(-_settings.Settings.DefaultFilterDays);
+
         _dayChangeWatcher = new DayChangeWatcher(() =>
         {
             if (_filterDateToFollowsToday) FilterDateTo = DateTime.Today;
@@ -299,7 +306,8 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                             DisplayName = LogPatterns.CleanPlayerName(s.DisplayName),
                             UserId = s.UserId,
                             JoinedAt = s.JoinedAt,
-                            LeftAt = s.LeftAt
+                            LeftAt = s.LeftAt,
+                            IsManual = s.IsManual
                         })
                         .Where(s => s.DisplayName != selfName)
                         .GroupBy(s => !string.IsNullOrEmpty(s.UserId) ? s.UserId : s.DisplayName)
@@ -313,7 +321,9 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                                 UserId = ordered[0].UserId,
                                 JoinedAt = ordered[0].JoinedAt,
                                 LeftAt = stillIn ? null : ordered.Max(s => s.LeftAt),
-                                Sessions = ordered.Select(s => (s.JoinedAt, s.LeftAt)).ToList()
+                                Sessions = ordered.Select(s => (s.JoinedAt, s.LeftAt)).ToList(),
+                                // 全セッションが手動の場合のみ「不明」表示にする（実測セッションが混在すれば実時刻を出す）
+                                IsManual = ordered.All(x => x.IsManual)
                             };
                         })
                         .OrderBy(s => s.JoinedAt)
@@ -345,8 +355,9 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                     {
                         // カードクリック: SQL で UserId 一致を直接引く
                         var targetUserId = searchPlayerUserId;
+                        // 手動タグ付けの同席者 (IsManual) は記憶ベースのため遭遇統計から除外する。
                         var byUserId = await db.PlayerSessions.AsNoTracking()
-                            .Where(s => s.UserId == targetUserId)
+                            .Where(s => s.UserId == targetUserId && !s.IsManual)
                             .ToListAsync();
 
                         // UserId が空のセッション (旧 activity log インポート由来等) は DisplayName でフォールバック。
@@ -355,7 +366,7 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                         if (!string.IsNullOrWhiteSpace(fallbackName))
                         {
                             var emptyIdSessions = await db.PlayerSessions.AsNoTracking()
-                                .Where(s => s.UserId == "")
+                                .Where(s => s.UserId == "" && !s.IsManual)
                                 .ToListAsync();
                             byName = emptyIdSessions
                                 .Where(s => KanaHelper.ContainsKanaInsensitive(s.DisplayName, fallbackName))
@@ -369,7 +380,10 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                         // 同 UserId の全セッション（改名後含む）＋ UserId 空の名前一致をまとめてヒット対象にする。
                         // KanaHelper は SQL に翻訳できないため、全 PlayerSessions を一度ロードして in-memory で照合する。
                         var search = searchPlayer!.Trim();
-                        var allSessions = await db.PlayerSessions.AsNoTracking().ToListAsync();
+                        // 手動タグ付けの同席者 (IsManual) は遭遇統計から除外する。
+                        var allSessions = await db.PlayerSessions.AsNoTracking()
+                            .Where(s => !s.IsManual)
+                            .ToListAsync();
                         var summaryUserIds = allSessions
                             .Where(s => !string.IsNullOrEmpty(s.UserId)
                                         && KanaHelper.ContainsKanaInsensitive(s.DisplayName, search))
@@ -460,6 +474,57 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
             VRChatLauncher.LaunchInstance(SelectedVisit.InstanceId);
     }
 
+    // ── 右クリックメニュー（行単位の再参加 / URL 操作） ──
+
+    /// <summary>右クリックした訪問のインスタンスに再参加する（確認ダイアログ付き）</summary>
+    [RelayCommand]
+    private async Task RejoinInstanceAsync(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasInstanceId) return;
+        if (await _dialog.ShowConfirmAsync(string.Format(LocalizationService.GetString("Confirm_Rejoin"), visit.WorldName)))
+            VRChatLauncher.LaunchInstance(visit.InstanceId);
+    }
+
+    /// <summary>インスタンス起動ページ URL をクリップボードにコピーする（InviteMe での移動用）</summary>
+    [RelayCommand]
+    private void CopyInstanceUrl(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasInstanceId) return;
+        ClipboardHelper.SetText(VRChatLauncher.InstanceLaunchUrl(visit.InstanceId));
+    }
+
+    /// <summary>インスタンス起動ページを既定ブラウザで開く（InviteMe での移動用）</summary>
+    [RelayCommand]
+    private void OpenInstanceInBrowser(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasInstanceId) return;
+        VRChatLauncher.OpenInBrowser(VRChatLauncher.InstanceLaunchUrl(visit.InstanceId));
+    }
+
+    /// <summary>ワールド紹介ページ URL をクリップボードにコピーする（再訪用）</summary>
+    [RelayCommand]
+    private void CopyWorldUrl(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasWorldId) return;
+        ClipboardHelper.SetText(VRChatLauncher.WorldPageUrl(visit.InstanceId));
+    }
+
+    /// <summary>ワールド紹介ページを既定ブラウザで開く（再訪用）</summary>
+    [RelayCommand]
+    private void OpenWorldInBrowser(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasWorldId) return;
+        VRChatLauncher.OpenInBrowser(VRChatLauncher.WorldPageUrl(visit.InstanceId));
+    }
+
+    /// <summary>ワールド名（テキスト）をクリップボードにコピーする</summary>
+    [RelayCommand]
+    private void CopyWorldName(WorldVisitDisplay? visit)
+    {
+        if (visit == null || !visit.HasWorldName) return;
+        ClipboardHelper.SetText(visit.WorldName);
+    }
+
     /// <summary>選択中のワールド訪問の写真を表示する画面に遷移する</summary>
     [RelayCommand]
     private async Task ShowPhotosForVisit()
@@ -528,6 +593,18 @@ public class WorldVisitDisplay : ObservableObject
 
     /// <summary>インスタンスID（再参加用）</summary>
     public string InstanceId { get; set; } = string.Empty;
+
+    /// <summary>インスタンスIDから抽出したワールドID（再訪・URL生成用）</summary>
+    public string WorldId => LogPatterns.ExtractWorldId(InstanceId);
+
+    /// <summary>再参加・インスタンスURL操作が可能か（インスタンスIDを持つ場合のみ）</summary>
+    public bool HasInstanceId => !string.IsNullOrEmpty(InstanceId);
+
+    /// <summary>有効なワールドIDを持つか（手動作成・旧データは InstanceId が空のため false）</summary>
+    public bool HasWorldId => WorldId.StartsWith("wrld_");
+
+    /// <summary>ワールド名を持つか（ワールド名コピーの可否判定用）</summary>
+    public bool HasWorldName => !string.IsNullOrEmpty(WorldName);
 
     /// <summary>入室日時</summary>
     public DateTime JoinedAt { get; set; }

@@ -143,6 +143,44 @@
                 <DataGrid.RowStyle>
                     <Style TargetType="DataGridRow" BasedOn="{StaticResource MaterialDesignDataGridRow}">
                         <Setter Property="Cursor" Value="Hand" />
+                        <!-- ContextMenu は別ビジュアルツリー(Popup)のため、行の Tag に VM を載せて
+                             PlacementTarget.Tag 経由でコマンドへ到達する。CommandParameter は
+                             PlacementTarget.DataContext = 右クリックした行の WorldVisitDisplay。 -->
+                        <Setter Property="Tag"
+                                Value="{Binding DataContext, RelativeSource={RelativeSource AncestorType=DataGrid}}" />
+                        <Setter Property="ContextMenu">
+                            <Setter.Value>
+                                <ContextMenu>
+                                    <MenuItem Header="{DynamicResource Ctx_CopyWorldUrl}"
+                                              Command="{Binding PlacementTarget.Tag.CopyWorldUrlCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasWorldId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <MenuItem Header="{DynamicResource Ctx_OpenWorldInBrowser}"
+                                              Command="{Binding PlacementTarget.Tag.OpenWorldInBrowserCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasWorldId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Separator />
+                                    <MenuItem Header="{DynamicResource Ctx_CopyInstanceUrl}"
+                                              Command="{Binding PlacementTarget.Tag.CopyInstanceUrlCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <MenuItem Header="{DynamicResource Ctx_OpenInstanceInBrowser}"
+                                              Command="{Binding PlacementTarget.Tag.OpenInstanceInBrowserCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Separator />
+                                    <MenuItem Header="{DynamicResource Ctx_CopyWorldName}"
+                                              Command="{Binding PlacementTarget.Tag.CopyWorldNameCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasWorldName, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                    <Separator />
+                                    <MenuItem Header="{DynamicResource Activity_Rejoin}"
+                                              Command="{Binding PlacementTarget.Tag.RejoinInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                              IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                </ContextMenu>
+                            </Setter.Value>
+                        </Setter>
                     </Style>
                 </DataGrid.RowStyle>
                 <DataGrid.Columns>
