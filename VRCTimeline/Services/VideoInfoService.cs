@@ -59,6 +59,29 @@ public class VideoInfoService
     }
 
     /// <summary>
+    /// noembed.com が認識できない YouTube Shorts / ライブ配信形式の URL を
+    /// 標準の watch 形式に変換する（noembed は /shorts/ や /live/ のパス形式を
+    /// プロバイダとして判定できず "no matching providers found" を返すため）。
+    /// 変換結果は noembed へのリクエストにのみ使用し、DB 保存・画面表示の URL は変更しない。
+    /// 例: https://www.youtube.com/shorts/xxx → https://www.youtube.com/watch?v=xxx
+    /// </summary>
+    public static string NormalizeForOEmbed(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url)) return url;
+        if (!Uri.TryCreate(url, UriKind.Absolute, out var uri)) return url;
+        if (!uri.Host.EndsWith("youtube.com", StringComparison.OrdinalIgnoreCase)) return url;
+
+        var segments = uri.AbsolutePath.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        if (segments.Length >= 2
+            && (segments[0].Equals("shorts", StringComparison.OrdinalIgnoreCase)
+                || segments[0].Equals("live", StringComparison.OrdinalIgnoreCase)))
+        {
+            return $"https://www.youtube.com/watch?v={Uri.EscapeDataString(segments[1])}";
+        }
+        return url;
+    }
+
+    /// <summary>
     /// 動画 URL からタイトルとサムネイルを取得する。
     /// サムネイルはローカルにキャッシュされ、そのパスを返す。
     /// レート制限のため、リクエスト間に 600ms の遅延を挿入する。
@@ -70,8 +93,10 @@ public class VideoInfoService
         {
             await Task.Delay(600);
 
+            // Shorts / ライブ配信 URL は noembed が解釈できる watch 形式に変換して問い合わせる。
+            // キャッシュファイル名は元の URL から生成し、保存レコードとの対応を保つ。
             var response = await Http.GetStringAsync(
-                $"https://noembed.com/embed?url={Uri.EscapeDataString(url)}");
+                $"https://noembed.com/embed?url={Uri.EscapeDataString(NormalizeForOEmbed(url))}");
 
             using var doc = JsonDocument.Parse(response);
             var root = doc.RootElement;
