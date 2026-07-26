@@ -93,12 +93,15 @@
                         <TextBlock Text="{DynamicResource Settings_ShowWindowOnVRChatDetected}" VerticalAlignment="Center" />
                     </DockPanel>
 
-                    <DockPanel Margin="0,0,0,16">
+                    <DockPanel>
                         <ToggleButton DockPanel.Dock="Right"
                                       IsChecked="{Binding LaunchOnStartup}"
                                       Style="{StaticResource MaterialDesignSwitchToggleButton}" />
                         <TextBlock Text="{DynamicResource Settings_LaunchOnStartup}" VerticalAlignment="Center" />
                     </DockPanel>
+                    <TextBlock Text="{DynamicResource Settings_LaunchOnStartup_Hint}"
+                               Style="{StaticResource MaterialDesignCaptionTextBlock}"
+                               Opacity="0.6" TextWrapping="Wrap" Margin="0,6,0,16" />
 
                     <DockPanel Margin="0,0,0,16">
                         <ToggleButton DockPanel.Dock="Right"
@@ -163,6 +166,28 @@
                         <Separator Margin="0,0,0,16" />
                     </StackPanel>
 
+                    <!-- Past Log Import -->
+                    <TextBlock Text="{DynamicResource Settings_PastLogImportTitle}" Margin="0,0,0,8"
+                               Style="{StaticResource MaterialDesignSubtitle1TextBlock}" />
+                    <TextBlock Text="{DynamicResource Settings_PastLogImportDescription}"
+                               Opacity="0.6" TextWrapping="Wrap" Margin="0,0,0,12"
+                               Style="{StaticResource MaterialDesignBody2TextBlock}" />
+                    <StackPanel Orientation="Horizontal" Margin="0,0,0,16">
+                        <Button Content="{DynamicResource Settings_PastLogImportButton}"
+                                Command="{Binding ImportPastLogsCommand}"
+                                Style="{StaticResource MaterialDesignRaisedButton}"
+                                Margin="0,0,16,0" />
+                        <ProgressBar IsIndeterminate="True" Width="100"
+                                     Visibility="{Binding IsPastLogImporting, Converter={StaticResource BoolToVis}}" />
+                    </StackPanel>
+                    <!-- 空文字のときは畳む。表示したままだと空行分の余白が区切り線との間に残る -->
+                    <TextBlock Text="{Binding PastLogImportStatus}" Opacity="0.6"
+                               TextWrapping="Wrap" Margin="0,0,0,16"
+                               Visibility="{Binding HasPastLogImportStatus, Converter={StaticResource BoolToVis}}"
+                               Style="{StaticResource MaterialDesignBody2TextBlock}" />
+
+                    <Separator Margin="0,0,0,16" />
+
                     <!-- Thumbnail Cache -->
                     <TextBlock Text="{DynamicResource Settings_ThumbnailCache}" Margin="0,0,0,8"
                                Style="{StaticResource MaterialDesignSubtitle1TextBlock}" />
@@ -193,7 +218,7 @@
                     </StackPanel>
                 </StackPanel>
             </materialDesign:Card>
-            <TextBlock Text="VRC Timeline   v1.3.1"
+            <TextBlock Text="VRC Timeline   v1.4.0"
                        Style="{StaticResource MaterialDesignCaptionTextBlock}"
                        Opacity="0.4" HorizontalAlignment="Right" />
         </StackPanel>

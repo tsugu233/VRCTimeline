@@ -36,6 +36,9 @@ public partial class SettingsViewModel : ObservableObject
     private readonly DialogService _dialog;
     private readonly NavigationService _navigation;
 
+    /// <summary>過去ログ取り込みを VRChat 実行中にブロックするための参照</summary>
+    private readonly VRChatProcessMonitor _processMonitor;
+
     /// <summary>写真フォルダ変更時に監視を再起動するための参照</summary>
     private readonly PhotoWatcher _photoWatcher;
 
@@ -99,6 +102,21 @@ public partial class SettingsViewModel : ObservableObject
     /// <summary>インポートセクションを表示するか（既存データがない場合のみ表示）</summary>
     [ObservableProperty]
     private bool _showImportSection = true;
+
+    /// <summary>過去ログ取り込み中フラグ</summary>
+    [ObservableProperty]
+    private bool _isPastLogImporting;
+
+    /// <summary>過去ログ取り込みの進捗・結果メッセージ</summary>
+    [ObservableProperty]
+    private string _pastLogImportStatus = string.Empty;
+
+    /// <summary>
+    /// 進捗・結果メッセージを表示中かどうか。
+    /// 空文字のときに表示欄を畳み、ボタンと区切り線の間に空行分の余白が残らないようにする。
+    /// </summary>
+    [ObservableProperty]
+    private bool _hasPastLogImportStatus;
 
     /// <summary>選択中の言語</summary>
     private LanguageOption? _selectedLanguage;
@@ -174,13 +192,14 @@ public partial class SettingsViewModel : ObservableObject
         nameof(DefaultFilterDays)
     ];
 
-    public SettingsViewModel(SettingsService settingsService, LoadingService loadingService, DialogService dialogService, NavigationService navigationService, PhotoWatcher photoWatcher)
+    public SettingsViewModel(SettingsService settingsService, LoadingService loadingService, DialogService dialogService, NavigationService navigationService, PhotoWatcher photoWatcher, VRChatProcessMonitor processMonitor)
     {
         _settingsService = settingsService;
         _loading = loadingService;
         _dialog = dialogService;
         _navigation = navigationService;
         _photoWatcher = photoWatcher;
+        _processMonitor = processMonitor;
         RebuildPeriodOptions();
         LoadFromSettings();
         // 既定期間の選択肢ラベルを言語切替に追従させる（本 VM は Singleton のため解除不要）。
@@ -281,6 +300,11 @@ public partial class SettingsViewModel : ObservableObject
     }
 
     // ── テーマ変更ハンドラ ──
+
+    partial void OnPastLogImportStatusChanged(string value)
+    {
+        HasPastLogImportStatus = !string.IsNullOrEmpty(value);
+    }
 
     partial void OnIsDarkModeChanged(bool value)
     {
@@ -436,6 +460,114 @@ public partial class SettingsViewModel : ObservableObject
         {
             IsImporting = false;
             _loading.Hide();
+        }
+    }
+
+    /// <summary>
+    /// 過去の VRChat ログファイルをフォルダから一括で取り込む。
+    /// リアルタイム監視が動いていなかった期間（アプリ未起動時など）の履歴を後から補完するための機能。
+    /// 現在のセッションの記録と競合しないよう VRChat 実行中はブロックし、
+    /// 既存データと重複する訪問がある場合は上書きするかユーザーに確認する。
+    /// </summary>
+    [RelayCommand]
+    private async Task ImportPastLogsAsync()
+    {
+        if (IsPastLogImporting) return;
+
+        // 監視中のセッションと取り込みが同じ訪問を同時に書き換えるのを防ぐ
+        if (_processMonitor.IsVRChatRunning)
+        {
+            await _dialog.ShowInfoAsync(LocalizationService.GetString("Str_PastLogVRChatRunning"));
+            return;
+        }
+
+        var dialog = new Microsoft.Win32.OpenFolderDialog
+        {
+            Title = LocalizationService.GetString("Str_SelectPastLogFolder"),
+            InitialDirectory = GetExistingInitialDirectory(LogDirectory)
+        };
+        if (dialog.ShowDialog() != true) return;
+
+        IsPastLogImporting = true;
+        try
+        {
+            var service = new PastLogImportService();
+            var progress = new Progress<string>(msg =>
+            {
+                PastLogImportStatus = msg;
+                _loading.UpdateMessage(msg);
+            });
+
+            // ── 解析（DB 未変更） ──
+            PastLogParseResult parsed;
+            _loading.Show(LocalizationService.GetString("Str_Importing"));
+            try
+            {
+                parsed = await Task.Run(() => service.Parse(dialog.FolderName, progress));
+            }
+            finally
+            {
+                _loading.Hide();
+            }
+
+            if (parsed.TotalFiles == 0 || parsed.InvalidFiles == parsed.TotalFiles)
+            {
+                PastLogImportStatus = string.Empty;
+                await _dialog.ShowInfoAsync(LocalizationService.GetString("Str_PastLogNoLogs"));
+                return;
+            }
+            if (parsed.Visits.Count == 0)
+            {
+                PastLogImportStatus = string.Empty;
+                await _dialog.ShowInfoAsync(LocalizationService.GetString("Str_PastLogNoData"));
+                return;
+            }
+
+            // ── 重複確認（はい = 上書き / いいえ = スキップして追加分のみ） ──
+            bool overwrite = false;
+            var duplicates = await service.CountDuplicatesAsync(parsed);
+            if (duplicates > 0)
+            {
+                overwrite = await _dialog.ShowConfirmAsync(string.Format(
+                    LocalizationService.GetString("Str_PastLogDuplicateConfirm"), duplicates));
+            }
+
+            // ── DB 反映 ──
+            PastLogImportSummary summary;
+            _loading.Show(LocalizationService.GetString("Str_ImportingMessage"));
+            try
+            {
+                summary = await Task.Run(() => service.ApplyAsync(parsed, overwrite, progress));
+            }
+            finally
+            {
+                _loading.Hide();
+            }
+
+            _navigation.NotifyDataImported();
+
+            PastLogImportStatus = string.Format(
+                LocalizationService.GetString("Str_PastLogSummaryShort"),
+                summary.AddedVisits, summary.OverwrittenVisits, summary.SkippedVisits);
+
+            var message = string.Format(
+                LocalizationService.GetString("Str_PastLogSummary"),
+                summary.AddedVisits, summary.OverwrittenVisits, summary.SkippedVisits);
+            if (parsed.InvalidFiles > 0)
+            {
+                message += "\n" + string.Format(
+                    LocalizationService.GetString("Str_PastLogSummaryInvalid"), parsed.InvalidFiles);
+            }
+            await _dialog.ShowInfoAsync(message, LocalizationService.GetString("Str_Done"));
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError(ex);
+            PastLogImportStatus = LocalizationService.GetString("Str_ErrorPrefix") + ex.Message;
+        }
+        finally
+        {
+            IsPastLogImporting = false;
         }
     }
 

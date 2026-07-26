@@ -378,7 +378,6 @@ public partial class App : Application
         services.AddSingleton<ManualPhotoFixService>();
         services.AddSingleton<VRChatProcessMonitor>();
         services.AddSingleton<PhotoWatcher>();
-        services.AddTransient<LogScanner>();
         services.AddTransient<PhotoScanner>();
 
         services.AddSingleton<MainViewModel>();

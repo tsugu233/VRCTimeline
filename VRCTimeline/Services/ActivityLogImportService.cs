@@ -93,6 +93,25 @@ public class ActivityLogImportService
             }
         }
 
+        // 同一 Timestamp + ワールド名の重複入室行を 1 件に畳み込む。
+        // ソース DB に稀に存在する重複レコードを残したまま処理すると、1 件目の LeftAt に
+        // 2 件目の同時刻が入って滞在 0 秒の訪問になり、次の入室までのプレイヤー遭遇が
+        // どの訪問にも紐づかず失われる（2 件目自体も重複チェックでスキップされる）。
+        int duplicateJoins = 0;
+        var dedupedJoins = new List<(DateTime Timestamp, string WorldId, string WorldName, string InstanceId)>(worldJoins.Count);
+        foreach (var join in worldJoins)
+        {
+            if (dedupedJoins.Count > 0
+                && dedupedJoins[^1].Timestamp == join.Timestamp
+                && dedupedJoins[^1].WorldName == join.WorldName)
+            {
+                duplicateJoins++;
+                continue;
+            }
+            dedupedJoins.Add(join);
+        }
+        worldJoins = dedupedJoins;
+
         progress?.Report($"ワールド訪問 {worldJoins.Count} 件、プレイヤー遭遇 {playerMeets.Count} 件を処理中...");
 
         // ── 本アプリの DB にインポート ──
@@ -160,6 +179,7 @@ public class ActivityLogImportService
         }
 
         var summary = $"完了: {imported} 件インポート、{skipped} 件スキップ（重複）";
+        if (duplicateJoins > 0) summary += $"、{duplicateJoins} 件統合（重複入室行）";
         if (malformedRows > 0) summary += $"、{malformedRows} 件スキップ（不正な行）";
         if (failed > 0) summary += $"、{failed} 件失敗";
         progress?.Report(summary);

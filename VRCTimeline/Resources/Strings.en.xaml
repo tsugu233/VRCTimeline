@@ -66,6 +66,7 @@
     <sys:String x:Key="Settings_AppSettings">App Settings</sys:String>
     <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">Show window when VRChat launches</sys:String>
     <sys:String x:Key="Settings_LaunchOnStartup">Launch on Windows startup</sys:String>
+    <sys:String x:Key="Settings_LaunchOnStartup_Hint" xml:space="preserve">VRChat logs cannot be recorded while VRCTimeline is not running.&#x0a;Recording continues while the app is resident in the system tray, even with the window closed.</sys:String>
     <sys:String x:Key="Settings_MinimizeOnStartup">Minimize on launch</sys:String>
     <sys:String x:Key="Settings_DefaultPeriod">Default period</sys:String>
     <sys:String x:Key="Settings_DefaultPeriod_Hint">You can also change the display period from the "~" separator.</sys:String>
@@ -78,8 +79,11 @@
     <sys:String x:Key="Settings_LanguageSettings">Language</sys:String>
     <sys:String x:Key="Settings_DataManagement">Data Management</sys:String>
     <sys:String x:Key="Settings_ImportTitle">Import from VRChatActivityLogViewer</sys:String>
-    <sys:String x:Key="Settings_ImportDescription">Import world visit history and player encounter data from the database.&#x0a;Please select "VRChatActivityLog.db".</sys:String>
+    <sys:String x:Key="Settings_ImportDescription" xml:space="preserve">Import world visit history and player encounter data from the database.&#x0a;Please select "VRChatActivityLog.db".</sys:String>
     <sys:String x:Key="Settings_ImportButton">Import Data</sys:String>
+    <sys:String x:Key="Settings_PastLogImportTitle">Import Past Logs</sys:String>
+    <sys:String x:Key="Settings_PastLogImportDescription" xml:space="preserve">Adds history for periods when VRCTimeline was not running.&#x0a;Reads VRChat log files (output_log_*.txt) from the folder you select.&#x0a;Run this while VRChat is closed.</sys:String>
+    <sys:String x:Key="Settings_PastLogImportButton">Import Past Logs</sys:String>
     <sys:String x:Key="Settings_ThumbnailCache">Thumbnail Cache</sys:String>
     <sys:String x:Key="Settings_ThumbnailCacheDescription" xml:space="preserve">You can delete the video thumbnail cache folder.&#x0a;Entries beyond the 50 most recent are deleted automatically.</sys:String>
     <sys:String x:Key="Settings_ClearCache">Clear Cache</sys:String>
@@ -120,7 +124,7 @@
     <sys:String x:Key="Str_TimeUnknown">Unknown</sys:String>
     <sys:String x:Key="Confirm_Rejoin">Rejoin "{0}"?</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">No photos found for this visit.</sys:String>
-    <sys:String x:Key="OpenError_ExternalAppFailed">The photo viewer failed to launch.&#x0a;Please check your default app settings.</sys:String>
+    <sys:String x:Key="OpenError_ExternalAppFailed" xml:space="preserve">The photo viewer failed to launch.&#x0a;Please check your default app settings.</sys:String>
     <sys:String x:Key="Info_NoActivityForPhoto">No matching activity found.</sys:String>
     <sys:String x:Key="Str_PhotoCount">Showing {0} photos</sys:String>
     <!-- C# / Dialog strings -->
@@ -131,6 +135,16 @@
     <sys:String x:Key="Str_ErrorPrefix">Error: </sys:String>
     <sys:String x:Key="Str_SelectDatabase">Select VRChatActivityLogViewer Database</sys:String>
     <sys:String x:Key="Str_SqliteFilter">SQLite Database (*.db)|*.db|All Files (*.*)|*.*</sys:String>
+    <sys:String x:Key="Str_SelectPastLogFolder">Select the folder containing VRChat log files</sys:String>
+    <sys:String x:Key="Str_PastLogVRChatRunning" xml:space="preserve">Past logs cannot be imported while VRChat is running.&#x0a;Please close VRChat and try again.</sys:String>
+    <sys:String x:Key="Str_PastLogNoLogs">No VRChat log files (output_log_*.txt) were found in the selected folder.</sys:String>
+    <sys:String x:Key="Str_PastLogNoData">No world visits to import were found in the log files.</sys:String>
+    <sys:String x:Key="Str_PastLogScanning">Scanning logs... {0}/{1}: {2}</sys:String>
+    <sys:String x:Key="Str_PastLogApplying">Saving to database... {0}/{1}</sys:String>
+    <sys:String x:Key="Str_PastLogDuplicateConfirm" xml:space="preserve">{0} visits overlap with existing data.&#x0a;Overwrite them with the log contents?&#x0a;&#x0a;Yes: overwrite the existing visits with the logs&#x0a;No: keep existing data and add only new visits</sys:String>
+    <sys:String x:Key="Str_PastLogSummary" xml:space="preserve">Import finished.&#x0a;Added: {0} / Overwritten: {1} / Skipped: {2}</sys:String>
+    <sys:String x:Key="Str_PastLogSummaryShort">Done: {0} added / {1} overwritten / {2} skipped</sys:String>
+    <sys:String x:Key="Str_PastLogSummaryInvalid">Ignored files: {0} (not VRChat logs or corrupted)</sys:String>
     <sys:String x:Key="Str_ConfirmClearCache">Delete thumbnail cache?</sys:String>
     <sys:String x:Key="Str_CacheCleared">Cache cleared.</sys:String>
     <sys:String x:Key="Str_Done">Done</sys:String>

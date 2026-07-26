@@ -66,6 +66,7 @@
     <sys:String x:Key="Settings_AppSettings">アプリ設定</sys:String>
     <sys:String x:Key="Settings_ShowWindowOnVRChatDetected">VRChat検出時にウィンドウを表示</sys:String>
     <sys:String x:Key="Settings_LaunchOnStartup">Windows起動時に実行</sys:String>
+    <sys:String x:Key="Settings_LaunchOnStartup_Hint" xml:space="preserve">VRCTimelineを起動していない間のVRChatログは記録できません。&#x0a;ウィンドウを閉じてもタスクトレイに常駐している間は記録が継続されます。</sys:String>
     <sys:String x:Key="Settings_MinimizeOnStartup">起動時に最小化</sys:String>
     <sys:String x:Key="Settings_DefaultPeriod">既定の表示期間</sys:String>
     <sys:String x:Key="Settings_DefaultPeriod_Hint">表示期間の選択は「～」から変更できます。</sys:String>
@@ -78,8 +79,11 @@
     <sys:String x:Key="Settings_LanguageSettings">言語設定(Language)</sys:String>
     <sys:String x:Key="Settings_DataManagement">データ管理</sys:String>
     <sys:String x:Key="Settings_ImportTitle">VRChatActivityLogViewer データ引き継ぎ</sys:String>
-    <sys:String x:Key="Settings_ImportDescription">データベースからワールド訪問履歴とプレイヤー遭遇データをインポートします。&#x0a;「VRChatActivityLog.db」を指定してください。</sys:String>
+    <sys:String x:Key="Settings_ImportDescription" xml:space="preserve">データベースからワールド訪問履歴とプレイヤー遭遇データをインポートします。&#x0a;「VRChatActivityLog.db」を指定してください。</sys:String>
     <sys:String x:Key="Settings_ImportButton">データを引き継ぐ</sys:String>
+    <sys:String x:Key="Settings_PastLogImportTitle">過去ログの取り込み</sys:String>
+    <sys:String x:Key="Settings_PastLogImportDescription" xml:space="preserve">VRCTimelineを起動していなかった期間の履歴を後から追加できます。&#x0a;指定したフォルダ内のVRChatログ (output_log_*.txt) を読み込みます。&#x0a;VRChatを終了した状態で実行してください。</sys:String>
+    <sys:String x:Key="Settings_PastLogImportButton">過去ログを取り込む</sys:String>
     <sys:String x:Key="Settings_ThumbnailCache">サムネイルキャッシュ</sys:String>
     <sys:String x:Key="Settings_ThumbnailCacheDescription" xml:space="preserve">動画サムネイルのキャッシュフォルダを削除できます。&#x0a;直近50件以降は自動的に削除されています。</sys:String>
     <sys:String x:Key="Settings_ClearCache">キャッシュを削除</sys:String>
@@ -120,7 +124,7 @@
     <sys:String x:Key="Str_TimeUnknown">不明</sys:String>
     <sys:String x:Key="Confirm_Rejoin">「{0}」に入り直しますか？</sys:String>
     <sys:String x:Key="Info_NoPhotosForVisit">この訪問の写真は見つかりませんでした。</sys:String>
-    <sys:String x:Key="OpenError_ExternalAppFailed">フォトビューアーの起動に失敗しました&#x0a;既定のアプリ設定を確認してください。</sys:String>
+    <sys:String x:Key="OpenError_ExternalAppFailed" xml:space="preserve">フォトビューアーの起動に失敗しました&#x0a;既定のアプリ設定を確認してください。</sys:String>
     <sys:String x:Key="Info_NoActivityForPhoto">対応するアクティビティが見つかりませんでした。</sys:String>
     <sys:String x:Key="Str_PhotoCount">{0} 枚の写真を表示中</sys:String>
     <!-- C# / Dialog strings -->
@@ -131,6 +135,16 @@
     <sys:String x:Key="Str_ErrorPrefix">エラー: </sys:String>
     <sys:String x:Key="Str_SelectDatabase">VRChatActivityLogViewerのデータベースを選択</sys:String>
     <sys:String x:Key="Str_SqliteFilter">SQLiteデータベース (*.db)|*.db|すべてのファイル (*.*)|*.*</sys:String>
+    <sys:String x:Key="Str_SelectPastLogFolder">VRChatログファイルのあるフォルダを選択</sys:String>
+    <sys:String x:Key="Str_PastLogVRChatRunning" xml:space="preserve">VRChatの実行中は過去ログを取り込めません。&#x0a;VRChatを終了してからもう一度お試しください。</sys:String>
+    <sys:String x:Key="Str_PastLogNoLogs">選択したフォルダにVRChatのログファイル (output_log_*.txt) が見つかりませんでした。</sys:String>
+    <sys:String x:Key="Str_PastLogNoData">ログファイルから取り込めるワールド訪問が見つかりませんでした。</sys:String>
+    <sys:String x:Key="Str_PastLogScanning">ログを解析中... {0}/{1}: {2}</sys:String>
+    <sys:String x:Key="Str_PastLogApplying">データベースへ保存中... {0}/{1}</sys:String>
+    <sys:String x:Key="Str_PastLogDuplicateConfirm" xml:space="preserve">既存のデータと重複する訪問が {0} 件見つかりました。&#x0a;ログの内容で上書きしますか？&#x0a;&#x0a;「はい」: 既存の訪問をログの内容で上書き&#x0a;「いいえ」: 既存データはそのまま、新しい訪問のみ追加</sys:String>
+    <sys:String x:Key="Str_PastLogSummary" xml:space="preserve">取り込みが完了しました。&#x0a;新規: {0} 件 / 上書き: {1} 件 / スキップ: {2} 件</sys:String>
+    <sys:String x:Key="Str_PastLogSummaryShort">完了: 新規 {0} / 上書き {1} / スキップ {2}</sys:String>
+    <sys:String x:Key="Str_PastLogSummaryInvalid">対象外のファイル: {0} 件（VRChatのログではない、または破損）</sys:String>
     <sys:String x:Key="Str_ConfirmClearCache">サムネイルキャッシュを削除しますか？</sys:String>
     <sys:String x:Key="Str_CacheCleared">キャッシュを削除しました。</sys:String>
     <sys:String x:Key="Str_Done">完了</sys:String>

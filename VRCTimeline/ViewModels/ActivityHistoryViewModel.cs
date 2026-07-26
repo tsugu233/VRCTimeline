@@ -309,7 +309,13 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                             LeftAt = s.LeftAt,
                             IsManual = s.IsManual
                         })
-                        .Where(s => s.DisplayName != selfName)
+                        // 自分自身は名前リストから除外する（人数は後段で +1 して足し戻す）。
+                        // UserId 一致（改名しても追従）を優先し、UserId が空のセッションのみ表示名でフォールバック。
+                        // 表示名のみの一致だと改名時や selfName 未解決時に自分が漏れて二重計上されるため、
+                        // 遭遇統計側（自分除外ロジック）と同一の条件に揃える。
+                        .Where(s => !(
+                            (!string.IsNullOrEmpty(selfUserId) && s.UserId == selfUserId)
+                            || (string.IsNullOrEmpty(s.UserId) && !string.IsNullOrEmpty(selfName) && s.DisplayName == selfName)))
                         .GroupBy(s => !string.IsNullOrEmpty(s.UserId) ? s.UserId : s.DisplayName)
                         .Select(g =>
                         {
@@ -336,6 +342,8 @@ public partial class ActivityHistoryViewModel : ObservableObject, IDisposable
                         InstanceId = v.InstanceId,
                         JoinedAt = v.JoinedAt,
                         LeftAt = v.LeftAt,
+                        // sessions は自分を除いた他プレイヤー。人数は自分を含む在室総数とするため +1 する。
+                        // （アクティビティログ取込など自分が記録されない訪問でも、この +1 で自分を補完する）
                         PlayerCount = sessions.Count + 1,
                         PlayerNames = sessions.Select(s => s.DisplayName).ToList(),
                         PlayerSessions = sessions

@@ -24,7 +24,10 @@ public class AppDbContext : DbContext
     /// <summary>VRChat スクリーンショットのメタデータ</summary>
     public DbSet<PhotoRecord> PhotoRecords => Set<PhotoRecord>();
 
-    /// <summary>ログファイルの処理済み位置（差分スキャン用）</summary>
+    /// <summary>
+    /// ログファイルの処理済み位置。
+    /// 現在は未使用（既存 DB とのスキーマ互換のため残置）。
+    /// </summary>
     public DbSet<ProcessedLogFile> ProcessedLogFiles => Set<ProcessedLogFile>();
 
     /// <summary>Invite / Boop 等の通知履歴</summary>
