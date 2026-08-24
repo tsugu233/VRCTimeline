@@ -23,4 +23,11 @@ public class PhotoRecord
 
     /// <summary>関連するワールド訪問（ナビゲーションプロパティ）</summary>
     public WorldVisit? WorldVisit { get; set; }
+
+    /// <summary>
+    /// ユーザーが手動でワールド訪問へ割り当てた写真か。false = 撮影時刻からの自動判定。
+    /// 既存データはすべて false（起動時のスキーマ更新で NOT NULL DEFAULT 0 として追加される）。
+    /// 「自動判定に戻す」を出すかどうかの判定と、写真カードの手動マーカー表示に使う。
+    /// </summary>
+    public bool IsManuallyAssigned { get; set; }
 }

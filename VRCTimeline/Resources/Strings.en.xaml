@@ -27,6 +27,9 @@
     <sys:String x:Key="Ctx_CopyWorldUrl">Copy world URL</sys:String>
     <sys:String x:Key="Ctx_OpenWorldInBrowser">Open world in browser</sys:String>
     <sys:String x:Key="Ctx_CopyWorldName">Copy world name</sys:String>
+    <sys:String x:Key="Ctx_MovePhotos">Move to another world...</sys:String>
+    <sys:String x:Key="Ctx_MergeGroup">Move this whole group...</sys:String>
+    <sys:String x:Key="Ctx_ResetToAuto">Reset to auto detection</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">Show Activity</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">Open Photo</sys:String>
@@ -40,7 +43,6 @@
     <sys:String x:Key="Photo_FixUnknown_Title">Fix Unknown World</sys:String>
     <sys:String x:Key="Photo_FixEdit_Title">Edit</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Undo">Undo this fix (revert photos to Unknown)</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_Button">Fix Selected Photos</sys:String>
     <sys:String x:Key="Photo_FixUnknown_TargetCount">Target: {0} photo(s)</sys:String>
     <sys:String x:Key="Photo_FixUnknown_WorldNameHint">World name (optional, blank = "Unknown World")</sys:String>
     <sys:String x:Key="Photo_FixUnknown_AssignExisting">Assign to an existing visit</sys:String>
@@ -50,9 +52,15 @@
     <sys:String x:Key="Photo_FixUnknown_NoCandidates">No nearby visits found</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Save">Save</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Cancel">Cancel</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_NoTargets">No "unknown world" photos to fix.</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">No photos to apply this to.</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Saving">Saving...</sys:String>
-    <sys:String x:Key="Photo_MultiSelectStatus">{0} selected</sys:String>
+    <!-- Photos: move photos / merge groups -->
+    <sys:String x:Key="Photo_Move_Title">Move Photos to Another World</sys:String>
+    <sys:String x:Key="Photo_Move_TargetCount">Moving {0} photo(s)</sys:String>
+    <sys:String x:Key="Photo_Move_SearchHint">Search by world name</sys:String>
+    <sys:String x:Key="Photo_Move_NoSearchResults">No matching world visits</sys:String>
+    <sys:String x:Key="Photo_ResetAuto_Confirm">Clear the manual assignment for {0} photo(s) and re-detect the world from the capture time. Continue?</sys:String>
+    <sys:String x:Key="Photo_ManualBadge_Tooltip">Manually assigned photo</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">Directory Settings</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChat Log Folder</sys:String>

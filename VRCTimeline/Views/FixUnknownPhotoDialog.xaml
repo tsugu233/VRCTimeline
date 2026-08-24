@@ -21,19 +21,31 @@
                 <!-- CreateOrAssign: mode toggle (assign existing / create new) -->
                 <StackPanel Visibility="{Binding ShowModeToggle, Converter={StaticResource BoolToVis}}">
                     <RadioButton GroupName="FixMode"
-                                 IsEnabled="{Binding HasCandidates}"
+                                 IsEnabled="{Binding CanAssignExisting}"
                                  IsChecked="{Binding UseExistingVisit, Mode=TwoWay}"
                                  Content="{DynamicResource Photo_FixUnknown_AssignExisting}"
                                  Margin="0,0,0,4" />
-                    <ComboBox ItemsSource="{Binding Candidates}"
-                              SelectedItem="{Binding SelectedCandidate}"
-                              DisplayMemberPath="Display"
-                              IsEnabled="{Binding UseExistingVisit}"
-                              Visibility="{Binding UseExistingVisit, Converter={StaticResource BoolToVis}}"
-                              Margin="28,0,0,8" />
-                    <TextBlock Text="{DynamicResource Photo_FixUnknown_NoCandidates}"
-                               Opacity="0.6" FontSize="12" Margin="28,0,0,8"
-                               Visibility="{Binding HasCandidates, Converter={StaticResource InverseBoolToVis}}" />
+                    <!-- 移動先ピッカー: 検索欄が空なら撮影時刻の近傍候補（±6h）、
+                         入力すると全期間のワールド訪問から絞り込む（別の日のグループへも統合できるように）。 -->
+                    <StackPanel Margin="28,0,0,8"
+                                IsEnabled="{Binding UseExistingVisit}"
+                                Visibility="{Binding UseExistingVisit, Converter={StaticResource BoolToVis}}">
+                        <TextBox Text="{Binding VisitSearchText, UpdateSourceTrigger=PropertyChanged}"
+                                 materialDesign:HintAssist.Hint="{DynamicResource Photo_Move_SearchHint}"
+                                 materialDesign:TextFieldAssist.HasClearButton="True"
+                                 Margin="0,0,0,6" />
+                        <ListBox ItemsSource="{Binding Candidates}"
+                                 SelectedItem="{Binding SelectedCandidate}"
+                                 DisplayMemberPath="Display"
+                                 MaxHeight="180"
+                                 BorderThickness="1"
+                                 BorderBrush="{DynamicResource MaterialDesignDivider}"
+                                 ScrollViewer.VerticalScrollBarVisibility="Auto"
+                                 Visibility="{Binding HasCandidates, Converter={StaticResource BoolToVis}}" />
+                        <TextBlock Text="{Binding NoCandidateText}"
+                                   Opacity="0.6" FontSize="12"
+                                   Visibility="{Binding HasCandidates, Converter={StaticResource InverseBoolToVis}}" />
+                    </StackPanel>
 
                     <RadioButton GroupName="FixMode"
                                  IsChecked="{Binding CreateNewMode, Mode=TwoWay}"

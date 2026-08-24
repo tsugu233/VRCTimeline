@@ -36,19 +36,8 @@
             WorldFilterText="{Binding WorldFilter}"
             SearchCommand="{Binding LoadPhotosCommand}" />
 
-        <!-- Status + multi-select command bar -->
+        <!-- Status bar. 写真の移動・統合・復元はすべて写真の右クリックメニューから行う。 -->
         <DockPanel Grid.Row="1" Margin="0,0,0,8">
-            <!-- 複数選択時の一括修正コマンドバー（右寄せ） -->
-            <StackPanel DockPanel.Dock="Right" Orientation="Horizontal"
-                        VerticalAlignment="Center"
-                        Visibility="{Binding HasFixableSelection, Converter={StaticResource BoolToVis}}">
-                <TextBlock Text="{Binding MultiSelectStatus}" VerticalAlignment="Center"
-                           FontSize="12" Opacity="0.7" Margin="0,0,10,0" />
-                <Button Content="{DynamicResource Photo_FixUnknown_Button}"
-                        Style="{StaticResource MaterialDesignRaisedButton}"
-                        Command="{Binding FixSelectedUnknownPhotosCommand}"
-                        Padding="10,2" Height="30" />
-            </StackPanel>
             <StackPanel Orientation="Horizontal">
                 <TextBlock Text="{Binding StatusText}" Opacity="0.6" Margin="0,0,16,0"
                            VerticalAlignment="Center" />
@@ -261,6 +250,20 @@
                                           Command="{Binding PlacementTarget.Tag.RejoinInstanceCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
                                           IsEnabled="{Binding PlacementTarget.DataContext.HasInstanceId, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <Separator />
+                                <!-- 複数選択中の写真を右クリックした場合は選択全体が対象になる（VM 側で解決） -->
+                                <MenuItem Header="{DynamicResource Ctx_MovePhotos}"
+                                          Command="{Binding PlacementTarget.Tag.MoveContextPhotosCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <!-- グループ丸ごとの移動（統合）。CommandParameter は
+                                     右クリックした写真が属する PhotoGroupDisplay。 -->
+                                <MenuItem Header="{DynamicResource Ctx_MergeGroup}"
+                                          Command="{Binding PlacementTarget.Tag.MergeGroupCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext.Group, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
+                                <MenuItem Header="{DynamicResource Ctx_ResetToAuto}"
+                                          Command="{Binding PlacementTarget.Tag.ResetContextPhotosToAutoCommand, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          CommandParameter="{Binding PlacementTarget.DataContext, RelativeSource={RelativeSource AncestorType=ContextMenu}}"
+                                          IsEnabled="{Binding PlacementTarget.DataContext.IsManuallyAssigned, RelativeSource={RelativeSource AncestorType=ContextMenu}}" />
                             </ContextMenu>
                         </Setter.Value>
                     </Setter>
@@ -303,6 +306,17 @@
                                             CommandParameter="{Binding Name}">
                                         <materialDesign:PackIcon Kind="Pencil" Width="16" Height="16" />
                                     </Button>
+                                    <!-- 自動判定に戻す: 手動で割り当てた写真を含むグループのみ -->
+                                    <Button Margin="10,0,0,0" Padding="0" Width="26" Height="26"
+                                            VerticalAlignment="Center"
+                                            Style="{StaticResource MaterialDesignIconButton}"
+                                            ToolTip="{DynamicResource Ctx_ResetToAuto}"
+                                            Visibility="{Binding Name.HasManuallyAssignedPhotos, Converter={StaticResource BoolToVis}}"
+                                            Command="{Binding DataContext.ResetGroupToAutoCommand,
+                                                RelativeSource={RelativeSource AncestorType=UserControl}}"
+                                            CommandParameter="{Binding Name}">
+                                        <materialDesign:PackIcon Kind="AutoFix" Width="16" Height="16" />
+                                    </Button>
                                 </StackPanel>
                             </Border>
                         </DataTemplate>
@@ -344,8 +358,19 @@
                                 <Border Height="126"
                                         Background="#2A2A2A"
                                         ClipToBounds="True">
-                                    <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
-                                        Stretch="Uniform" />
+                                    <Grid>
+                                        <Image Source="{Binding FilePath, Converter={StaticResource PathToThumb}, IsAsync=True}"
+                                            Stretch="Uniform" />
+                                        <!-- 手動で割り当てた写真の目印（「自動判定に戻す」が効く対象） -->
+                                        <Border HorizontalAlignment="Right" VerticalAlignment="Top"
+                                                Margin="0,4,4,0" Padding="3" CornerRadius="3"
+                                                Background="#99000000"
+                                                ToolTip="{DynamicResource Photo_ManualBadge_Tooltip}"
+                                                Visibility="{Binding IsManuallyAssigned, Converter={StaticResource BoolToVis}}">
+                                            <materialDesign:PackIcon Kind="HandBackRight" Width="12" Height="12"
+                                                                      Foreground="White" />
+                                        </Border>
+                                    </Grid>
                                 </Border>
                                 <StackPanel Margin="10,6,10,8">
                                     <TextBlock Text="{Binding TakenAtDisplay}"

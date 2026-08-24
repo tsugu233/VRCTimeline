@@ -152,20 +152,10 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
 
     /// <summary>
     /// 複数選択（拡張選択）された写真の一覧。MultiSelectBehavior 経由で ListBox.SelectedItems をミラーする。
-    /// 「不明なワールド」写真の一括修正コマンドの対象になる。
+    /// 右クリックメニューの操作対象を決める <see cref="ResolveContextTargets"/> から参照する
+    /// （選択中の写真を右クリックしたら選択全体、そうでなければその1枚が対象）。
     /// </summary>
     public ObservableCollection<PhotoDisplayItem> SelectedPhotos { get; } = [];
-
-    /// <summary>
-    /// 選択中に「不明なワールド」写真が1件以上あるか。
-    /// 一括修正コマンドバーは、修正が実際に適用できるこの場合のみ表示する
-    /// （通常の閲覧目的の単一選択ではバーを出さない）。
-    /// </summary>
-    public bool HasFixableSelection => SelectedPhotos.Any(p => p.WorldVisitId == null);
-
-    /// <summary>「N 枚選択中」表示文字列</summary>
-    public string MultiSelectStatus =>
-        string.Format(LocalizationService.GetString("Photo_MultiSelectStatus"), SelectedPhotos.Count);
 
     /// <summary>写真が選択されているか</summary>
     public bool IsPhotoSelected => SelectedPhoto != null;
@@ -209,14 +199,6 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
 
         // 初期表示期間を設定値（既定14日）から決定する。終了日は今日のまま。
         FilterDateFrom = DateTime.Today.AddDays(-_settingsService.Settings.DefaultFilterDays);
-
-        // 複数選択（一括修正用）の変更を CanExecute・件数表示へ反映する
-        SelectedPhotos.CollectionChanged += (_, _) =>
-        {
-            OnPropertyChanged(nameof(HasFixableSelection));
-            OnPropertyChanged(nameof(MultiSelectStatus));
-            FixSelectedUnknownPhotosCommand.NotifyCanExecuteChanged();
-        };
 
         // PhotoWatcher からのリアルタイム通知を購読
         photoWatcher.PhotoAdded += OnPhotoAdded;
@@ -594,6 +576,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
                                 WorldJoinedAt = p.WorldVisit?.JoinedAt,
                                 WorldLeftAt = p.WorldVisit?.LeftAt,
                                 WorldVisitId = p.WorldVisitId,
+                                IsManuallyAssigned = p.IsManuallyAssigned,
                                 InstanceId = p.WorldVisit?.InstanceId ?? string.Empty,
                                 Group = groupDisplay
                             }));
@@ -1012,16 +995,50 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         SelectedPhoto = null;
     }
 
-    /// <summary>複数選択中の「不明なワールド」写真を一括で手動修正する（コマンドバーから）。</summary>
-    [RelayCommand(CanExecute = nameof(CanFixSelectedUnknownPhotos))]
-    private async Task FixSelectedUnknownPhotosAsync()
+    /// <summary>
+    /// 右クリックメニューの「このグループをまとめて移動」。グループの写真を一括で別のワールド訪問へ移す。
+    /// ログ由来の実訪問レコード自体はアクティビティ画面に残し、写真だけを付け替える。
+    /// </summary>
+    [RelayCommand]
+    private async Task MergeGroupAsync(PhotoGroupDisplay? group)
     {
-        var targets = SelectedPhotos.Where(p => p.WorldVisitId == null).ToList();
-        await FixUnknownPhotosAsync(targets);
+        if (group == null) return;
+        await MovePhotosAsync(group.Photos.ToList());
     }
 
-    /// <summary>選択中に1枚でも「不明なワールド」写真があれば一括修正可能。</summary>
-    private bool CanFixSelectedUnknownPhotos() => SelectedPhotos.Any(p => p.WorldVisitId == null);
+    /// <summary>グループヘッダーの復元ボタン。グループ内の手動割り当て写真を自動判定に戻す。</summary>
+    [RelayCommand]
+    private async Task ResetGroupToAutoAsync(PhotoGroupDisplay? group)
+    {
+        if (group == null) return;
+        await ResetPhotosToAutoAsync(group.Photos.Where(p => p.IsManuallyAssigned).ToList());
+    }
+
+    /// <summary>右クリックメニューからの移動。</summary>
+    [RelayCommand]
+    private async Task MoveContextPhotosAsync(PhotoDisplayItem? clicked)
+    {
+        await MovePhotosAsync(ResolveContextTargets(clicked));
+    }
+
+    /// <summary>右クリックメニューからの「自動判定に戻す」。</summary>
+    [RelayCommand]
+    private async Task ResetContextPhotosToAutoAsync(PhotoDisplayItem? clicked)
+    {
+        var targets = ResolveContextTargets(clicked).Where(p => p.IsManuallyAssigned).ToList();
+        await ResetPhotosToAutoAsync(targets);
+    }
+
+    /// <summary>
+    /// 右クリックメニューの操作対象を決める。ContextMenu は別ビジュアルツリー（Popup）にあり
+    /// CommandParameter で右クリックした1枚しか渡せないため、
+    /// その写真が複数選択に含まれていれば選択全体を、含まれていなければその1枚だけを対象にする。
+    /// </summary>
+    private List<PhotoDisplayItem> ResolveContextTargets(PhotoDisplayItem? clicked)
+    {
+        if (clicked == null) return SelectedPhotos.ToList();
+        return SelectedPhotos.Contains(clicked) ? SelectedPhotos.ToList() : [clicked];
+    }
 
     /// <summary>
     /// グループヘッダーの編集（鉛筆）ボタンの振り分け。
@@ -1034,7 +1051,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         if (group.WorldVisitId == null)
         {
             var targets = group.Photos.Where(p => p.WorldVisitId == null).ToList();
-            await FixUnknownPhotosAsync(targets);
+            await MovePhotosAsync(targets);
         }
         else
         {
@@ -1125,11 +1142,12 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
     }
 
     /// <summary>
-    /// 「不明なワールド」写真群の手動修正ダイアログを開き、結果に応じて
-    /// 既存訪問への割り当て or 手動訪問作成＋写真割り当て＋手動同席者追加を行う。
-    /// 割り当て後は孤立写真群が1つの訪問グループに統合されるため再読み込みする。
+    /// 写真の割り当て先を選ぶダイアログを開き、結果に応じて
+    /// 既存訪問への移動 or 手動訪問作成＋写真移動＋手動同席者追加を行う。
+    /// 未分類写真の初回修正、分類済み写真の移動、グループ統合をすべてこの経路で処理する。
+    /// 移動後はグループ構成が変わるため再読み込みする。
     /// </summary>
-    private async Task FixUnknownPhotosAsync(IReadOnlyList<PhotoDisplayItem> targets)
+    private async Task MovePhotosAsync(IReadOnlyList<PhotoDisplayItem> targets)
     {
         if (targets.Count == 0)
         {
@@ -1144,10 +1162,21 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
         var selfName = await _selfPlayer.GetSelfPlayerNameAsync();
 
         var candidates = await _manualFix.GetCandidateVisitsAsync(fromTime, toTime);
+        var allVisits = await _manualFix.GetAllVisitsAsync();
         var knownPlayers = await _manualFix.GetKnownPlayersAsync(selfUserId, selfName);
 
+        // 対象が全て同じ訪問に属しているなら、その訪問は移動先になり得ない（自分自身への移動）。
+        // グループ統合ボタンからの呼び出しでは統合元グループがこれに当たる。
+        var distinctVisitIds = targets.Select(p => p.WorldVisitId).Distinct().ToList();
+        var excludeVisitId = distinctVisitIds.Count == 1 ? distinctVisitIds[0] : null;
+
+        // 未分類だけなら従来の「修正」文言、分類済みを含むなら「移動」文言にする。
+        var mode = targets.All(p => p.WorldVisitId == null)
+            ? FixDialogMode.CreateOrAssign
+            : FixDialogMode.MovePhotos;
+
         var dialogVm = new FixUnknownPhotoDialogViewModel(
-            FixDialogMode.CreateOrAssign, targets.Count, null, candidates, knownPlayers, []);
+            mode, targets.Count, null, candidates, knownPlayers, [], allVisits, excludeVisitId);
         var dialogView = new FixUnknownPhotoDialog { DataContext = dialogVm };
         await DialogHost.Show(dialogView, "RootDialogHost");
 
@@ -1175,7 +1204,7 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             }
 
             var filePaths = targets.Select(p => p.FilePath).ToList();
-            await _manualFix.AssignPhotosToVisitAsync(filePaths, visitId);
+            await _manualFix.MovePhotosToVisitAsync(filePaths, visitId);
 
             // 手動同席者は対象訪問の時間範囲を入退室時刻として付与する（統計には含めない）。
             foreach (var friend in dialogVm.TaggedFriends)
@@ -1191,8 +1220,44 @@ public partial class PhotoManagerViewModel : ObservableObject, IDisposable
             _loading.Hide();
         }
 
-        // 編集後に一覧が先頭へ戻らないよう、修正対象（最新の撮影時刻）の写真までスクロール位置を復元する。
+        // 編集後に一覧が先頭へ戻らないよう、対象（最新の撮影時刻）の写真までスクロール位置を復元する。
         var anchorPath = targets.OrderByDescending(p => p.TakenAt).First().FilePath;
+        await ReloadAndScrollToAsync(anchorPath);
+    }
+
+    /// <summary>
+    /// 手動割り当てを解除して自動判定に戻す。WorldVisitId を null に戻すだけで、
+    /// 直後の再読み込みで RelinkOrphanPhotosAsync が撮影時刻から自動再リンクする
+    /// （ReloadAsync が _maintenanceDone をリセットするため必ず走る）。
+    /// </summary>
+    private async Task ResetPhotosToAutoAsync(IReadOnlyList<PhotoDisplayItem> targets)
+    {
+        if (targets.Count == 0)
+        {
+            await _dialog.ShowInfoAsync(LocalizationService.GetString("Photo_FixUnknown_NoTargets"));
+            return;
+        }
+
+        var confirmed = await _dialog.ShowConfirmAsync(
+            string.Format(LocalizationService.GetString("Photo_ResetAuto_Confirm"), targets.Count));
+        if (!confirmed) return;
+
+        var anchorPath = targets.OrderByDescending(p => p.TakenAt).First().FilePath;
+
+        _loading.Show(LocalizationService.GetString("Photo_FixUnknown_Saving"));
+        try
+        {
+            await _manualFix.ResetPhotosToAutoAsync(targets.Select(p => p.FilePath).ToList());
+        }
+        catch (Exception ex)
+        {
+            AppLogger.LogError(ex);
+        }
+        finally
+        {
+            _loading.Hide();
+        }
+
         await ReloadAndScrollToAsync(anchorPath);
     }
 
@@ -1321,6 +1386,13 @@ public class PhotoGroupDisplay : ObservableObject
     public bool HasManualPlayers { get; set; }
 
     /// <summary>
+    /// このグループに手動で割り当てた写真が含まれるか。
+    /// グループヘッダーの「自動判定に戻す」ボタンの表示条件。
+    /// グループは読み込みのたびに作り直されるので算出プロパティで足りる。
+    /// </summary>
+    public bool HasManuallyAssignedPhotos => Photos.Any(p => p.IsManuallyAssigned);
+
+    /// <summary>
     /// グループヘッダーの編集（鉛筆）ボタンを表示すべきか。
     /// 「不明」グループ（初回修正）、手動訪問（名前/フレンド編集・取り消し）、
     /// 手動フレンドを持つ実訪問（手動フレンドの編集）のいずれか＝自分が編集したデータを後から直せる。
@@ -1369,6 +1441,12 @@ public class PhotoDisplayItem : ObservableObject
 
     /// <summary>対応するワールド訪問のID</summary>
     public int? WorldVisitId { get; set; }
+
+    /// <summary>
+    /// ユーザーが手動でワールド訪問へ割り当てた写真か。
+    /// 写真カードの手動マーカーと「自動判定に戻す」の可否判定に使う。
+    /// </summary>
+    public bool IsManuallyAssigned { get; set; }
 
     /// <summary>対応するワールド訪問のインスタンスID（再参加・URL生成用）</summary>
     public string InstanceId { get; set; } = string.Empty;

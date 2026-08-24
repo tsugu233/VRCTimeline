@@ -27,6 +27,9 @@
     <sys:String x:Key="Ctx_CopyWorldUrl">ワールドURLをコピー</sys:String>
     <sys:String x:Key="Ctx_OpenWorldInBrowser">ワールドをブラウザで開く</sys:String>
     <sys:String x:Key="Ctx_CopyWorldName">ワールド名をコピー</sys:String>
+    <sys:String x:Key="Ctx_MovePhotos">別のワールドへ移動...</sys:String>
+    <sys:String x:Key="Ctx_MergeGroup">このグループをまとめて移動...</sys:String>
+    <sys:String x:Key="Ctx_ResetToAuto">自動判定に戻す</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">アクティビティを表示</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">写真を開く</sys:String>
@@ -40,7 +43,6 @@
     <sys:String x:Key="Photo_FixUnknown_Title">不明なワールドを修正</sys:String>
     <sys:String x:Key="Photo_FixEdit_Title">編集</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Undo">この修正を取り消す（写真を「不明」に戻す）</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_Button">選択した写真を修正</sys:String>
     <sys:String x:Key="Photo_FixUnknown_TargetCount">対象: {0} 枚</sys:String>
     <sys:String x:Key="Photo_FixUnknown_WorldNameHint">ワールド名（任意・未入力で「不明なワールド」）</sys:String>
     <sys:String x:Key="Photo_FixUnknown_AssignExisting">既存の訪問に割り当てる</sys:String>
@@ -50,9 +52,15 @@
     <sys:String x:Key="Photo_FixUnknown_NoCandidates">近接する訪問が見つかりません</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Save">保存</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Cancel">キャンセル</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_NoTargets">修正対象の「不明なワールド」写真がありません。</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">対象の写真がありません。</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Saving">保存中...</sys:String>
-    <sys:String x:Key="Photo_MultiSelectStatus">{0} 枚選択中</sys:String>
+    <!-- Photos: 写真の移動・グループ統合 -->
+    <sys:String x:Key="Photo_Move_Title">写真を別のワールドへ移動</sys:String>
+    <sys:String x:Key="Photo_Move_TargetCount">移動する写真: {0} 枚</sys:String>
+    <sys:String x:Key="Photo_Move_SearchHint">ワールド名で検索</sys:String>
+    <sys:String x:Key="Photo_Move_NoSearchResults">一致するワールド訪問がありません</sys:String>
+    <sys:String x:Key="Photo_ResetAuto_Confirm">{0} 枚の写真の手動割り当てを解除し、撮影時刻から自動で判定し直します。よろしいですか？</sys:String>
+    <sys:String x:Key="Photo_ManualBadge_Tooltip">手動で割り当てた写真</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">ディレクトリ設定</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChatログフォルダ</sys:String>

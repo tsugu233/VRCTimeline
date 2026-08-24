@@ -27,6 +27,9 @@
     <sys:String x:Key="Ctx_CopyWorldUrl">월드 URL 복사</sys:String>
     <sys:String x:Key="Ctx_OpenWorldInBrowser">월드를 브라우저에서 열기</sys:String>
     <sys:String x:Key="Ctx_CopyWorldName">월드 이름 복사</sys:String>
+    <sys:String x:Key="Ctx_MovePhotos">다른 월드로 이동...</sys:String>
+    <sys:String x:Key="Ctx_MergeGroup">이 그룹 전체 이동...</sys:String>
+    <sys:String x:Key="Ctx_ResetToAuto">자동 판정으로 되돌리기</sys:String>
     <!-- Photos -->
     <sys:String x:Key="Photo_ShowActivity">활동 보기</sys:String>
     <sys:String x:Key="Photo_OpenPhoto">사진 열기</sys:String>
@@ -40,7 +43,6 @@
     <sys:String x:Key="Photo_FixUnknown_Title">알 수 없는 월드 수정</sys:String>
     <sys:String x:Key="Photo_FixEdit_Title">편집</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Undo">이 수정을 취소(사진을 '알 수 없음'으로 되돌리기)</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_Button">선택한 사진 수정</sys:String>
     <sys:String x:Key="Photo_FixUnknown_TargetCount">대상: {0}장</sys:String>
     <sys:String x:Key="Photo_FixUnknown_WorldNameHint">월드 이름(선택, 비우면 '알 수 없는 월드')</sys:String>
     <sys:String x:Key="Photo_FixUnknown_AssignExisting">기존 방문에 할당</sys:String>
@@ -50,9 +52,15 @@
     <sys:String x:Key="Photo_FixUnknown_NoCandidates">근접한 방문을 찾을 수 없습니다</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Save">저장</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Cancel">취소</sys:String>
-    <sys:String x:Key="Photo_FixUnknown_NoTargets">수정할 '알 수 없는 월드' 사진이 없습니다.</sys:String>
+    <sys:String x:Key="Photo_FixUnknown_NoTargets">대상 사진이 없습니다.</sys:String>
     <sys:String x:Key="Photo_FixUnknown_Saving">저장 중...</sys:String>
-    <sys:String x:Key="Photo_MultiSelectStatus">{0}장 선택됨</sys:String>
+    <!-- Photos: 사진 이동 · 그룹 병합 -->
+    <sys:String x:Key="Photo_Move_Title">사진을 다른 월드로 이동</sys:String>
+    <sys:String x:Key="Photo_Move_TargetCount">이동할 사진: {0}장</sys:String>
+    <sys:String x:Key="Photo_Move_SearchHint">월드 이름으로 검색</sys:String>
+    <sys:String x:Key="Photo_Move_NoSearchResults">일치하는 월드 방문이 없습니다</sys:String>
+    <sys:String x:Key="Photo_ResetAuto_Confirm">사진 {0}장의 수동 할당을 해제하고 촬영 시각으로 다시 자동 판정합니다. 계속할까요?</sys:String>
+    <sys:String x:Key="Photo_ManualBadge_Tooltip">수동으로 할당한 사진</sys:String>
     <!-- Settings -->
     <sys:String x:Key="Settings_DirectorySettings">디렉토리 설정</sys:String>
     <sys:String x:Key="Settings_VRChatLogFolder">VRChat 로그 폴더</sys:String>

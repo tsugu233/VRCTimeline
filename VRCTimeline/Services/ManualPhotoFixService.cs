@@ -37,23 +37,119 @@ public class ManualPhotoFixService
     }
 
     /// <summary>
-    /// 指定したファイルパスの写真群を、指定のワールド訪問へ割り当てる。
+    /// 指定したファイルパスの写真群を、指定のワールド訪問へ付け替える（未分類・分類済みを問わない）。
     /// FilePath をキーにするのは、表示モデル（PhotoDisplayItem）が DB の主キーではなく FilePath を保持し、
     /// かつ FilePath が一意インデックスだから。割り当て後はもう孤立写真ではないため、
     /// RelinkOrphanPhotosAsync の自動再リンク対象外になる（上書きされない）。
+    ///
+    /// 移動先が手動訪問の場合は滞在時間範囲を受け入れた写真に合わせて広げ、
+    /// 写真が 0 枚になった移動元の手動訪問は手動同席者ごと削除する。
+    /// 「写真の更新 → 移動先の時刻拡張 → 空の手動訪問の削除」は 1 つの操作なのでトランザクションで囲う。
     /// </summary>
-    public async Task AssignPhotosToVisitAsync(IReadOnlyList<string> filePaths, int worldVisitId)
+    /// <returns>後始末で削除した空の手動訪問の件数</returns>
+    public async Task<int> MovePhotosToVisitAsync(IReadOnlyList<string> filePaths, int worldVisitId)
     {
-        if (filePaths.Count == 0) return;
+        if (filePaths.Count == 0) return 0;
         await using var db = new AppDbContext();
+        await using var tx = await db.Database.BeginTransactionAsync();
+
         var pathSet = filePaths.ToHashSet();
         var photos = await db.PhotoRecords
             .Where(p => pathSet.Contains(p.FilePath))
             .ToListAsync();
-        if (photos.Count == 0) return;
+        if (photos.Count == 0) return 0;
+
+        // 移動元の訪問 ID。移動先と同じものは除外する（自分自身への移動は実質 no-op）。
+        var sourceVisitIds = photos
+            .Where(p => p.WorldVisitId.HasValue && p.WorldVisitId.Value != worldVisitId)
+            .Select(p => p.WorldVisitId!.Value)
+            .Distinct()
+            .ToList();
+
         foreach (var photo in photos)
+        {
             photo.WorldVisitId = worldVisitId;
+            photo.IsManuallyAssigned = true;
+        }
+
+        // 手動訪問は写真の入れ物でしかないので、受け入れた写真が範囲外なら滞在時間を広げる
+        // （グループヘッダーの時間範囲が写真と食い違わないようにする）。
+        // ログ由来の実訪問の時刻はログが示す事実なので触らない。
+        // LeftAt == null は「滞在中／ログ欠損で未確定」の意味なので潰さない。
+        var target = await db.WorldVisits.FirstOrDefaultAsync(v => v.Id == worldVisitId);
+        if (target is { IsManual: true })
+        {
+            var minTaken = photos.Min(p => p.TakenAt);
+            var maxTaken = photos.Max(p => p.TakenAt);
+            if (minTaken < target.JoinedAt) target.JoinedAt = minTaken;
+            if (target.LeftAt != null && maxTaken > target.LeftAt.Value) target.LeftAt = maxTaken;
+        }
+
         await db.SaveChangesAsync();
+
+        var removed = await CleanupEmptyManualVisitsAsync(db, sourceVisitIds);
+        await tx.CommitAsync();
+        return removed;
+    }
+
+    /// <summary>
+    /// 手動割り当てを解除して自動判定に戻す。WorldVisitId を null に戻すだけで、
+    /// 直後の再読み込みで RelinkOrphanPhotosAsync が撮影時刻から自動再リンクする
+    /// （＝手動で動かす前の自動判定結果に戻る）。写真レコード・ファイルは削除しない。
+    /// 写真が 0 枚になった元の手動訪問は手動同席者ごと削除する。
+    /// </summary>
+    /// <returns>後始末で削除した空の手動訪問の件数</returns>
+    public async Task<int> ResetPhotosToAutoAsync(IReadOnlyList<string> filePaths)
+    {
+        if (filePaths.Count == 0) return 0;
+        await using var db = new AppDbContext();
+        await using var tx = await db.Database.BeginTransactionAsync();
+
+        var pathSet = filePaths.ToHashSet();
+        var photos = await db.PhotoRecords
+            .Where(p => pathSet.Contains(p.FilePath))
+            .ToListAsync();
+        if (photos.Count == 0) return 0;
+
+        var sourceVisitIds = photos
+            .Where(p => p.WorldVisitId.HasValue)
+            .Select(p => p.WorldVisitId!.Value)
+            .Distinct()
+            .ToList();
+
+        foreach (var photo in photos)
+        {
+            photo.WorldVisitId = null;
+            photo.IsManuallyAssigned = false;
+        }
+        await db.SaveChangesAsync();
+
+        var removed = await CleanupEmptyManualVisitsAsync(db, sourceVisitIds);
+        await tx.CommitAsync();
+        return removed;
+    }
+
+    /// <summary>
+    /// 写真が 1 枚も残っていない手動訪問 (IsManual) を、手動同席者セッションごと削除する。
+    /// ログ由来の実訪問 (IsManual == false) は写真が 0 枚でも「訪問した事実」なので絶対に削除しない
+    /// （アクティビティ画面の履歴が消えてしまうため）。
+    /// 呼び出し側のトランザクションに参加させるため AppDbContext を受け取る。
+    /// </summary>
+    private static async Task<int> CleanupEmptyManualVisitsAsync(AppDbContext db, IReadOnlyList<int> visitIds)
+    {
+        if (visitIds.Count == 0) return 0;
+        var idSet = visitIds.ToHashSet();
+        var empties = await db.WorldVisits
+            .Include(v => v.PlayerSessions)
+            .Where(v => idSet.Contains(v.Id) && v.IsManual && !v.Photos.Any())
+            .ToListAsync();
+        if (empties.Count == 0) return 0;
+
+        foreach (var visit in empties)
+            db.PlayerSessions.RemoveRange(visit.PlayerSessions);
+        db.WorldVisits.RemoveRange(empties);
+        await db.SaveChangesAsync();
+        return empties.Count;
     }
 
     /// <summary>
@@ -191,6 +287,21 @@ public class ManualPhotoFixService
             .Select(v => new CandidateVisit(v.Id, v.WorldName, v.JoinedAt, v.LeftAt))
             .ToListAsync();
         return visits;
+    }
+
+    /// <summary>
+    /// 訪問ピッカーのインクリメンタル検索用に、全ワールド訪問を軽量射影で返す。
+    /// GetCandidateVisitsAsync は撮影時刻の近傍しか返さないため、別の日のグループへ統合できない。
+    /// 検索時はこのリストをメモリ上で絞り込む（GetKnownPlayersAsync と同じ方針。
+    /// WorldVisit は PlayerSession より一桁少ないので負荷は軽い）。
+    /// </summary>
+    public async Task<List<CandidateVisit>> GetAllVisitsAsync()
+    {
+        await using var db = new AppDbContext();
+        return await db.WorldVisits.AsNoTracking()
+            .OrderByDescending(v => v.JoinedAt)
+            .Select(v => new CandidateVisit(v.Id, v.WorldName, v.JoinedAt, v.LeftAt))
+            .ToListAsync();
     }
 }
 
