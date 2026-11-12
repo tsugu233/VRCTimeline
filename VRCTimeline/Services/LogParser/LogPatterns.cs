@@ -27,6 +27,14 @@ public static partial class LogPatterns
     [GeneratedRegex(@"User Authenticated: (.+)$")]
     public static partial Regex UserAuthenticatedRegex();
 
+    /// <summary>
+    /// ログイン後チェック行
+    /// 例: "[Authentication - …] Preforming post login checks for 表示名 (usr_xxx)"
+    /// グループ1 = "表示名 (usr_xxx)" 形式の生データ
+    /// </summary>
+    [GeneratedRegex(@"post login checks for (.+)$")]
+    public static partial Regex PostLoginChecksRegex();
+
     /// <summary>プレイヤー入室イベント。グループ1 = "表示名 (usr_xxx)" 形式の生データ</summary>
     [GeneratedRegex(@"\[Behaviour\] OnPlayerJoined (.+)$")]
     public static partial Regex PlayerJoinedRegex();
